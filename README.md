@@ -4,6 +4,11 @@ Claude Code skill that delegates work to child Claude/Codex sessions in new [cmu
 
 cmux 새 탭에 자식 Claude·Codex 세션을 띄워 일을 맡기고, 작업 강도(E1~E4)에 맞는 effort 로 실행한 뒤 보고서로 결과를 돌려받는 Claude Code 스킬입니다. 실제로 적용된 model·effort 를 세션 기록으로 검증하고, 실패하면 한 등급 위로 한 번 승급합니다.
 
+> [!IMPORTANT]
+> **macOS + cmux 전용입니다.** 오케스트레이터는 cmux 안에서 도는 Claude Code 세션이어야 합니다. 설치(`npx skills add`)는 Windows·Linux·WSL 에서도 되지만, cmux 가 macOS 전용이라 그 환경에서는 relay 가 탭을 열 수 없어 실행되지 않습니다. Codex 는 자식 세션으로만 지원하며, Codex 를 오케스트레이터로 쓰는 구성은 지원하지 않습니다.
+>
+> **macOS + cmux only.** The orchestrator must be a Claude Code session running inside cmux. Installation works on Windows/Linux/WSL, but the skill cannot run there because cmux is macOS-only. Codex is supported as a child session only, not as the orchestrator.
+
 ## 설치
 
 ```bash
