@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseEventLine, matchesWorkspace, decodeFeedSessionId, WATCHED, isRelevant } from '../scripts/lib/events.mjs';
+import { parseEventLine, matchesWorkspace, matchesTab, decodeFeedSessionId, WATCHED, isRelevant } from '../scripts/lib/events.mjs';
 import { verdictFor, stopFromRollout } from '../scripts/lib/verdict.mjs';
 
 const WS = '11111111-1111-4111-8111-111111111111';
@@ -23,11 +23,24 @@ test('⑥ workspace 비교는 대소문자 무시, RF4 다른 workspace 는 무�
 
 test('PoC: 훅 이벤트는 phase received·completed 짝으로 온다 → completed 는 건너뛴다', () => {
   const stop = (phase) => ({ name: 'agent.hook.Stop', seq: 1, workspace_id: WS, payload: { workspace_id: WS, phase } });
-  assert.equal(isRelevant(stop('received'), WS), true);
-  assert.equal(isRelevant(stop('completed'), WS), false);
-  assert.equal(isRelevant(stop(undefined), WS), true);
-  assert.equal(isRelevant({ name: 'notification.created', seq: 2, workspace_id: WS, payload: { phase: 'completed' } }, WS), true);
-  assert.equal(isRelevant(stop('received'), OTHER), false);
+  const tab = { uuid: WS };
+  assert.equal(isRelevant(stop('received'), tab), true);
+  assert.equal(isRelevant(stop('completed'), tab), false);
+  assert.equal(isRelevant(stop(undefined), tab), true);
+  assert.equal(isRelevant({ name: 'notification.created', seq: 2, workspace_id: WS, payload: { phase: 'completed' } }, tab), true);
+  assert.equal(isRelevant(stop('received'), { uuid: OTHER }), false);
+});
+
+test('split·tab 자식은 surface 로 가린다: 같은 workspace 의 오케스트레이터 탭 이벤트는 무시', () => {
+  const CHILD = '55555555-5555-4555-8555-555555555555';
+  const ORCH = '66666666-6666-4666-8666-666666666666';
+  const on = (sf) => ({ name: 'agent.hook.Stop', seq: 1, workspace_id: WS, surface_id: sf, payload: { workspace_id: WS, surface_id: sf } });
+  const tab = { uuid: WS, surface: CHILD };
+  assert.ok(matchesTab(on(CHILD.toLowerCase()), tab));
+  assert.ok(!matchesTab(on(ORCH), tab));
+  assert.ok(!matchesTab({ name: 'agent.hook.Stop', seq: 1, workspace_id: WS }, tab)); // surface 없는 이벤트는 집지 않는다
+  assert.ok(matchesTab({ name: 'notification.created', seq: 2, payload: { surface_id: CHILD } }, tab));
+  assert.equal(isRelevant(on(ORCH), tab), false);
 });
 
 test('parseEventLine: 빈 줄·깨진 줄·필드 없는 줄은 null', () => {

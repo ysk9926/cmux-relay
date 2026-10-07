@@ -2,11 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { runRelay, fakeCmux, fakeUserHome, writeBrief, tmp, UUIDS } from './helpers.mjs';
+import { runRelay, fakeCmux, fakeUserHome, writeBrief, tmp, ORCH, SURFACES } from './helpers.mjs';
 import { readMeta, writeMeta } from '../scripts/lib/store.mjs';
 
-const UUID = UUIDS[0];
-const ev = (name, seq, ws = UUID) => JSON.stringify({ name, seq, workspace_id: ws, payload: { workspace_id: ws } }) + '\n';
+// 기본 placement 는 split: 자식 탭은 오케스트레이터와 같은 workspace 에 있어 surface 로 가린다
+const ev = (name, seq, sf = SURFACES[0]) => JSON.stringify({ name, seq, workspace_id: ORCH.workspace, surface_id: sf, payload: { workspace_id: ORCH.workspace, surface_id: sf } }) + '\n';
 const future = () => new Date(Date.now() + 60_000).toISOString();
 
 async function spawned(agent = 'claude') {
@@ -24,7 +24,7 @@ function writeClaudeTranscript(ctx, effort = 'low') {
 }
 const tick = () => new Promise((r) => setImmediate(r));
 
-test('wait: Stop + 보고서 done → 0, 대조·설정 비교·로그, RF4 다른 workspace 무시, RF3 Stop 중복은 한 번', async () => {
+test('wait: Stop + 보고서 done → 0, 대조·설정 비교·로그, RF4 같은 workspace 의 오케스트레이터 탭 Stop 무시, RF3 Stop 중복은 한 번', async () => {
   const { ctx, d1 } = await spawned();
   writeClaudeTranscript(ctx);
   writeReport(ctx, d1, 'done');
@@ -32,7 +32,7 @@ test('wait: Stop + 보고서 done → 0, 대조·설정 비교·로그, RF4 다�
   await tick();
   const st = ctx.cmux.streams[0];
   assert.equal(st.after, 100);
-  st.stdout.write(ev('agent.hook.Stop', 101, UUIDS[1]));
+  st.stdout.write(ev('agent.hook.Stop', 101, ORCH.surface));
   st.stdout.write(ev('agent.hook.Stop', 102));
   st.stdout.write(ev('agent.hook.Stop', 103));
   const r = await p;

@@ -4,11 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import { runRelay, fakeCmux, fakeUserHome, writeBrief, tmp, UUIDS } from './helpers.mjs';
+import { runRelay, fakeCmux, fakeUserHome, writeBrief, tmp, ORCH, SURFACES } from './helpers.mjs';
 import { readMeta, writeMeta } from '../scripts/lib/store.mjs';
 import { RelayError } from '../scripts/lib/errors.mjs';
 
-const ev = (name, seq, ws = UUIDS[0]) => JSON.stringify({ name, seq, workspace_id: ws, payload: { workspace_id: ws } }) + '\n';
+const ev = (name, seq, sf = SURFACES[0]) => JSON.stringify({ name, seq, workspace_id: ORCH.workspace, surface_id: sf, payload: { workspace_id: ORCH.workspace, surface_id: sf } }) + '\n';
 const tick = () => new Promise((r) => setImmediate(r));
 
 async function spawned(agent = 'claude') {
@@ -81,8 +81,8 @@ test('리뷰 I3: git worktree 실패는 WORKTREE_FAILED JSON', async () => {
 test('리뷰 I3: 탭 생성이 실패하면 작업 폴더를 지워 같은 ID 를 다시 쓸 수 있다', async () => {
   const home = path.join(tmp(), 'relay');
   const broken = fakeCmux();
-  broken.createWorkspace = () => {
-    throw new RelayError('CMUX_FAILED', 'cmux new-workspace failed: socket');
+  broken.createSplit = () => {
+    throw new RelayError('CMUX_FAILED', 'cmux new-split failed: socket');
   };
   const args = ['spawn', '--agent', 'claude', '--task', 're', '--brief', writeBrief(), '--effort', 'low', '--cwd', '/w'];
   const r = await runRelay(args, { home, userHome: fakeUserHome(), cmux: broken });

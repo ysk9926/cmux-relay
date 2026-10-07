@@ -2,7 +2,7 @@
 
 English | [한국어](#한국어) · [Changelog](CHANGELOG.md)
 
-Claude Code skill that delegates work to child Claude/Codex sessions in new [cmux](https://github.com/manaflow-ai/cmux) tabs — picks effort by task tier (E1–E4), detects completion via per-dispatch report files, verifies the applied model/effort, and escalates once on failure.
+Claude Code skill that delegates work to child Claude/Codex sessions opened as [cmux](https://github.com/manaflow-ai/cmux) splits or tabs next to the orchestrator — picks effort by task tier (E1–E4), detects completion via per-dispatch report files, verifies the applied model/effort, and escalates once on failure.
 
 > [!IMPORTANT]
 > **macOS + cmux only.** The orchestrator must be a Claude Code session running inside cmux. Installation works on Windows/Linux/WSL, but the skill cannot run there because cmux is macOS-only. Codex is supported as a child session only, not as the orchestrator.
@@ -22,12 +22,12 @@ npx skills add ysk9926/cmux-relay@cmux-relay -g -y
 | Codex CLI (child, optional) | 0.160.1 |
 | Node.js (no external dependencies) | 24 |
 
-The orchestrator must be a Claude Code session running inside cmux. Children run in new cmux tabs, and completion is decided from cmux events plus a report file.
+The orchestrator must be a Claude Code session running inside cmux. Children open inside the orchestrator's own workspace (a split by default), and completion is decided from cmux events plus a report file.
 
 ## How it works
 
 1. The orchestrator picks the agent with `config/agent-policy.json` and the tier (E1–E4) with `config/effort-tiers.json`, then announces both in one line (anything the user specifies always wins).
-2. `relay spawn` opens a new tab and launches the child with the fixed model plus the tier's effort as launch flags.
+2. `relay spawn` opens a split next to the orchestrator and launches the child with the fixed model plus the tier's effort as launch flags.
 3. Run `relay wait` in the background; it wakes up when the child writes this dispatch's `report-<dispatchId>.json` and ends its turn.
 4. On exit it compares the actually applied model/effort from the child's session transcript, and checks that no global effort setting changed.
 5. If an auto-classified dispatch fails (exit 4), `relay escalate` retries once via fork at the next tier's effort.
@@ -43,6 +43,21 @@ $R close docfix
 ```
 
 Every subcommand has `--help` and `--dry-run`. The work folder is `~/.agent-relay/` (override with `RELAY_HOME`).
+
+## Where children open
+
+Children open inside the orchestrator's own workspace, so when several orchestrator sessions run at once, each one's children stay next to it.
+
+| `--placement` | Like | Where |
+|---|---|---|
+| `split` (default) | ⌘D | the first child splits to the right of the orchestrator; later children stack below the most recent one, forming one column |
+| `tab` | ⌘T | a new tab in the focused pane of the orchestrator's workspace |
+| `workspace` | — | a new workspace in the sidebar (the behavior before 0.3.0) |
+
+- Children open without taking focus, and their tab title is set to `relay-<task>-xxxx`.
+- `split` and `tab` need `CMUX_WORKSPACE_ID` and `CMUX_SURFACE_ID`, which cmux sets in every terminal. Outside cmux, `relay spawn` refuses with `NOT_IN_CMUX`; use `--placement workspace` there.
+- Because a split cannot take its own cwd or env, the launch file does `cd` and `export` before starting the agent.
+- Escalations open with the same placement as the task. Tasks created before 0.3.0 keep opening as workspaces.
 
 ## Agent selection
 
@@ -97,6 +112,7 @@ Change the fixed models (default Claude `opus`, Codex `gpt-6.1-sol`) and levels 
 - Inside cmux, `codex` is a shim that adds config overrides, so `codex queue` is rejected, and the queue is not drained after an interrupted turn → Codex follow-ups are typed into the tab's composer too (Enter sent 800 ms after the text).
 - Codex approval waits emit no `agent.hook.PermissionRequest`; they show up only as cmux `notification.created` plus a `needsInput` session state.
 - Hook events are recorded in pairs with `payload.phase` = `received` and `completed`.
+- Hook events and session records carry `surface_id`, so a split or tab child is told apart from the orchestrator in the same workspace by surface, not workspace.
 
 ## Known limitations
 
@@ -121,7 +137,7 @@ Unit tests only (fake cmux, temp folders); they never open real cmux tabs or lau
 
 ## 한국어
 
-cmux 새 탭에 자식 Claude·Codex 세션을 띄워 일을 맡기고, 작업 강도(E1~E4)에 맞는 effort 로 실행한 뒤 보고서로 결과를 돌려받는 Claude Code 스킬입니다. 실제로 적용된 model·effort 를 세션 기록으로 검증하고, 실패하면 한 등급 위로 한 번 승급합니다.
+오케스트레이터 옆 cmux 분할·탭에 자식 Claude·Codex 세션을 띄워 일을 맡기고, 작업 강도(E1~E4)에 맞는 effort 로 실행한 뒤 보고서로 결과를 돌려받는 Claude Code 스킬입니다. 실제로 적용된 model·effort 를 세션 기록으로 검증하고, 실패하면 한 등급 위로 한 번 승급합니다.
 
 > [!IMPORTANT]
 > **macOS + cmux 전용입니다.** 오케스트레이터는 cmux 안에서 도는 Claude Code 세션이어야 합니다. 설치(`npx skills add`)는 Windows·Linux·WSL 에서도 되지만, cmux 가 macOS 전용이라 그 환경에서는 relay 가 탭을 열 수 없어 실행되지 않습니다. Codex 는 자식 세션으로만 지원하며, Codex 를 오케스트레이터로 쓰는 구성은 지원하지 않습니다.
@@ -139,12 +155,12 @@ npx skills add ysk9926/cmux-relay@cmux-relay -g -y
 | Codex CLI (자식, 선택) | 0.160.1 |
 | Node.js (외부 의존성 없음) | 24 |
 
-오케스트레이터는 cmux 안에서 도는 Claude Code 세션이어야 합니다. 자식은 cmux 새 탭에서 실행되고, 완료는 cmux 이벤트와 보고서 파일로 판정합니다.
+오케스트레이터는 cmux 안에서 도는 Claude Code 세션이어야 합니다. 자식은 오케스트레이터와 같은 workspace 안(기본은 분할)에서 실행되고, 완료는 cmux 이벤트와 보고서 파일로 판정합니다.
 
 ### 동작 흐름
 
 1. 오케스트레이터가 에이전트는 `config/agent-policy.json`, 업무 강도(E1~E4)는 `config/effort-tiers.json` 기준으로 정하고 한 줄로 알립니다(사용자가 지정하면 그 값이 우선).
-2. `relay spawn` 이 새 탭을 열고 고정 모델 + 등급별 effort 를 실행 플래그로 붙여 자식을 띄웁니다.
+2. `relay spawn` 이 오케스트레이터 옆에 분할을 열고 고정 모델 + 등급별 effort 를 실행 플래그로 붙여 자식을 띄웁니다.
 3. `relay wait` 을 백그라운드로 걸어 두면, 자식이 이번 지시의 `report-<dispatchId>.json` 을 쓰고 턴을 마칠 때 깨어납니다.
 4. 끝날 때 자식 세션 기록에서 실제 model·effort 를 대조하고, effort 관련 전역 설정이 바뀌지 않았는지 확인합니다.
 5. 자동 판정한 지시가 실패(4)하면 `relay escalate` 로 한 등급 위 effort 로 fork 재시도를 한 번 합니다.
@@ -160,6 +176,21 @@ $R close docfix
 ```
 
 모든 하위 명령에 `--help`·`--dry-run` 이 있습니다. 작업 폴더는 `~/.agent-relay/`(환경변수 `RELAY_HOME` 으로 변경 가능)입니다.
+
+### 자식이 열리는 곳
+
+자식은 오케스트레이터 자신의 workspace 안에 열립니다. 여러 오케스트레이터 세션을 동시에 돌려도 각 자식이 자기 오케스트레이터 옆에 붙어 있어 어느 세션 것인지 바로 보입니다.
+
+| `--placement` | 단축키 | 위치 |
+|---|---|---|
+| `split` (기본) | ⌘D | 첫 자식은 오케스트레이터 오른쪽, 다음 자식은 직전 자식 아래로 쌓여 오른쪽 한 열에 모입니다 |
+| `tab` | ⌘T | 오케스트레이터 workspace 의 포커스된 pane 에 새 탭 |
+| `workspace` | — | 사이드바에 새 workspace (0.3.0 이전 동작) |
+
+- 자식은 포커스를 가져가지 않고, 탭 제목은 `relay-<task>-xxxx` 로 붙습니다.
+- `split`·`tab` 은 cmux 가 모든 터미널에 넣는 `CMUX_WORKSPACE_ID`·`CMUX_SURFACE_ID` 가 있어야 합니다. cmux 밖에서는 `NOT_IN_CMUX` 로 거부하니 `--placement workspace` 를 씁니다.
+- 분할에는 cwd·env 를 따로 줄 수 없어 launch 파일이 `cd`·`export` 를 한 뒤 에이전트를 띄웁니다.
+- 승급 탭은 작업과 같은 placement 로 열립니다. 0.3.0 이전에 만든 작업은 계속 workspace 로 열립니다.
 
 ### 에이전트 선택
 
@@ -214,6 +245,7 @@ $R close docfix
 - cmux 안의 `codex` 는 설정 덮어쓰기가 붙는 shim 이라 `codex queue` 가 거부되고, 중단된 턴 뒤에는 큐가 비워지지 않습니다 → Codex 후속 지시도 탭 입력창에 넣습니다(입력 뒤 800ms 후 Enter).
 - Codex 승인 대기는 `agent.hook.PermissionRequest` 없이 cmux `notification.created` + 세션 `needsInput` 으로만 나타납니다.
 - 훅 이벤트는 `payload.phase` 가 `received`·`completed` 인 두 개가 짝으로 기록됩니다.
+- 훅 이벤트와 세션 기록에 `surface_id` 가 있어, 같은 workspace 의 오케스트레이터와 분할·탭 자식을 workspace 가 아닌 surface 로 구분합니다.
 
 ### 알려진 한계
 

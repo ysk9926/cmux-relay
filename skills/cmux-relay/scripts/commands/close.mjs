@@ -17,19 +17,18 @@ export async function run(argv, ctx) {
   }
   const taskId = requirePositional(positionals, 'task');
   const meta = readMeta(ctx.home, taskId);
-  const refs = meta.tabs.map((t) => t.ref);
   if (v['dry-run']) {
-    ctx.out({ dryRun: true, close: refs });
+    ctx.out({ dryRun: true, close: meta.tabs.map((t) => t.ref) });
     return 0;
   }
   const closed = [];
   const failed = [];
-  for (const ref of refs) {
+  for (const tab of meta.tabs) {
     try {
-      ctx.cmux.close(ref);
-      closed.push(ref);
+      ctx.cmux.close(tab);
+      closed.push(tab.ref);
     } catch (e) {
-      failed.push({ ref, error: e.message });
+      failed.push({ ref: tab.ref, error: e.message });
     }
   }
   meta.closedAt = ctx.now().toISOString();

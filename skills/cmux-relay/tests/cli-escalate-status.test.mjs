@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { runRelay, fakeCmux, fakeUserHome, writeBrief, tmp, UUIDS } from './helpers.mjs';
+import { runRelay, fakeCmux, fakeUserHome, writeBrief, tmp, ORCH, SURFACES } from './helpers.mjs';
 import { readMeta, writeMeta } from '../scripts/lib/store.mjs';
 
 async function spawned(agent = 'claude', tierArgs = ['--tier', 'E1', '--tier-reason', '읽기 전용']) {
@@ -40,16 +40,18 @@ test('escalate Claude: --effort 다음 등급 --resume <세션> --fork-session, 
   const r = await runRelay(['escalate', 't', '--from', d1], ctx);
   assert.equal(r.code, 0);
   assert.deepEqual(r.last.requested, { tier: 'E2', model: 'opus', effort: 'medium', source: 'auto' });
-  const create = ctx.cmux.calls.filter((c) => c[0] === 'createWorkspace')[1][1];
-  assert.equal(create.cwd, '/w');
+  // 승급 탭도 split 이라 오른쪽 열의 맨 아래(여기서는 실패한 자식 아래)로 분할된다
+  const create = ctx.cmux.calls.filter((c) => c[0] === 'createSplit')[1][1];
+  assert.deepEqual([create.surface, create.direction], [SURFACES[0], 'down']);
   const meta = readMeta(ctx.home, 't');
   assert.match(create.command, /^source \S+\/launch-d2e-[0-9a-f]{4}\.zsh$/);
   const launch = fs.readFileSync(meta.dispatches[1].launchFile, 'utf8');
+  assert.ok(launch.startsWith('cd /w || return\n'));
   assert.match(launch, /--effort medium --resume S1 --fork-session '/);
   assert.ok(launch.includes('타입 오류 3건'));
   assert.equal(meta.dispatches[0].escalatedTo, meta.dispatches[1].dispatchId);
   assert.equal(meta.dispatches[1].escalatedFrom, d1);
-  assert.deepEqual([meta.tabs[1].uuid, meta.tabs[1].sessionId, meta.tabs[1].observe], [UUIDS[1], 'S2', 'hook']);
+  assert.deepEqual([meta.tabs[1].uuid, meta.tabs[1].surface, meta.tabs[1].sessionId, meta.tabs[1].observe], [ORCH.workspace, SURFACES[1], 'S2', 'hook']);
   setDispatch(ctx, 1, { exitCode: 4 });
   const again = await runRelay(['escalate', 't', '--from', meta.dispatches[1].dispatchId], ctx);
   assert.equal(again.last.message, 'already-escalated');
@@ -79,7 +81,7 @@ test('escalate Codex: codex fork <세션> 이 맨 앞, fork 세션은 rollout �
   const r = await runRelay(['escalate', 't', '--from', d1], { ...ctx, sleep });
   assert.equal(r.code, 0);
   const meta = readMeta(ctx.home, 't');
-  assert.match(fs.readFileSync(meta.dispatches[1].launchFile, 'utf8'), /^codex fork S1 -s workspace-write -a on-request -m gpt-6\.1-sol -c model_reasoning_effort=medium /);
+  assert.match(fs.readFileSync(meta.dispatches[1].launchFile, 'utf8'), /^codex fork S1 -s workspace-write -a on-request -m gpt-6\.1-sol -c model_reasoning_effort=medium /m);
   const tab = meta.tabs[1];
   assert.deepEqual([tab.sessionId, tab.observe], ['F1', 'rollout']);
 });
@@ -89,7 +91,7 @@ test('escalate --dry-run: 탭을 열지 않음', async () => {
   setDispatch(ctx, 0, { exitCode: 4 });
   const r = await runRelay(['escalate', 't', '--from', d1, '--dry-run'], ctx);
   assert.equal(r.last.dryRun, true);
-  assert.equal(ctx.cmux.calls.filter((c) => c[0] === 'createWorkspace').length, 1);
+  assert.equal(ctx.cmux.calls.filter((c) => c[0] === 'createSplit').length, 1);
 });
 
 test('status·close·list', async () => {
@@ -99,12 +101,12 @@ test('status·close·list', async () => {
   const text = await runRelay(['status', 't', '--no-screen'], ctx);
   assert.match(text.prints.join('\n'), /^task t · claude · \/w/);
   const dry = await runRelay(['close', 't', '--dry-run'], ctx);
-  assert.deepEqual(dry.last.close, ['workspace:21']);
+  assert.deepEqual(dry.last.close, ['surface:11']);
   assert.equal(ctx.cmux.calls.filter((c) => c[0] === 'close').length, 0);
   const c = await runRelay(['close', 't'], ctx);
-  assert.deepEqual(c.last.closed, ['workspace:21']);
+  assert.deepEqual(c.last.closed, ['surface:11']);
   assert.ok(fs.existsSync(path.join(ctx.home, 'tasks/t/meta.json')));
   const l = await runRelay(['list'], ctx);
-  assert.equal(l.last.tasks[0].taskId, 't');
+  assert.deepEqual([l.last.tasks[0].taskId, l.last.tasks[0].placement, l.last.tasks[0].parent], ['t', 'split', ORCH]);
   assert.ok(l.last.tasks[0].closedAt);
 });

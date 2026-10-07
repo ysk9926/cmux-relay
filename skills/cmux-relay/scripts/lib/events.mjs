@@ -17,9 +17,19 @@ export function matchesWorkspace(event, uuid) {
   return ws !== '' && ws === String(uuid).toUpperCase();
 }
 
+export function matchesSurface(event, uuid) {
+  const sf = String(event.surface_id ?? event.payload?.surface_id ?? '').toUpperCase();
+  return sf !== '' && sf === String(uuid).toUpperCase();
+}
+
+// tab: { uuid, surface? }. split·tab 자식은 오케스트레이터와 workspace 가 같아 surface 로만 가린다.
+export function matchesTab(event, tab) {
+  return tab.surface ? matchesSurface(event, tab.surface) : matchesWorkspace(event, tab.uuid);
+}
+
 // 훅 이벤트는 payload.phase 가 received·completed 인 두 개가 짝으로 기록된다(PoC 실측). completed 는 건너뛴다.
-export function isRelevant(event, uuid) {
-  if (!matchesWorkspace(event, uuid)) return false;
+export function isRelevant(event, tab) {
+  if (!matchesTab(event, tab)) return false;
   return !(event.name.startsWith('agent.hook.') && event.payload?.phase === 'completed');
 }
 

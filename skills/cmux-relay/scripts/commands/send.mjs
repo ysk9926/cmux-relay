@@ -72,7 +72,7 @@ export async function run(argv, ctx) {
   const settingsBefore = snapshotSettings(ctx);
   const seq = ctx.cmux.latestSeq();
   const startedAt = ctx.now().toISOString();
-  ctx.cmux.send(tab.ref, text);
+  ctx.cmux.send(tab, text);
   meta.dispatches.push(dispatchRecord({
     dispatchId, kind, tab: tab.name, startedAt, seq,
     tier: base.tier, model: base.model, effort: base.effort, source: base.source, reason: base.reason, agentRule: base.agentRule ?? null,

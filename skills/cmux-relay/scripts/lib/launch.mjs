@@ -57,3 +57,26 @@ export function codexArgs({ preset, model, effort, prompt, addDirs = [], forkFro
   args.push(prompt);
   return args;
 }
+
+// split·tab 은 cmux 에 cwd·env 를 넘길 수 없어(분할은 오케스트레이터 폴더에서 열린다) launch 파일이 직접 맞춘다.
+// 대화형 zsh 가 source 하므로 cd 가 실패하면 return 으로 멈춘다.
+export function launchScript({ cwd, env = {}, command }) {
+  const lines = [`cd ${shellQuote(cwd)} || return`];
+  const pairs = Object.entries(env).map(([k, v]) => `${k}=${shellQuote(v)}`);
+  if (pairs.length) lines.push(`export ${pairs.join(' ')}`);
+  lines.push(command);
+  return lines.join('\n') + '\n';
+}
+
+export const PLACEMENTS = ['split', 'tab', 'workspace'];
+
+export function checkPlacement(placement) {
+  if (!PLACEMENTS.includes(placement)) throw new RelayError('PLACEMENT_INVALID', `placement must be one of ${PLACEMENTS.join('|')}: ${placement}`);
+}
+
+// 오케스트레이터 위치. cmux 가 모든 터미널에 넣고 workspace env 로도 덮어쓸 수 없는 변수다.
+export function callerOf(env) {
+  const workspace = env.CMUX_WORKSPACE_ID;
+  const surface = env.CMUX_SURFACE_ID;
+  return workspace && surface ? { workspace, surface } : null;
+}

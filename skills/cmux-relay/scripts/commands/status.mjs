@@ -10,7 +10,7 @@ export const HELP = `relay status — 탭 상태·지시 이력·보고서 유�
 
 function format(s) {
   const lines = [`task ${s.taskId} · ${s.agent} · ${s.cwd}`];
-  for (const t of s.tabs) lines.push(`  tab ${t.name} ${t.ref} observe=${t.observe} lifecycle=${t.lifecycle ?? '-'} session=${t.sessionId ?? '-'}`);
+  for (const t of s.tabs) lines.push(`  tab ${t.name} ${t.ref} ${t.placement} observe=${t.observe} lifecycle=${t.lifecycle ?? '-'} session=${t.sessionId ?? '-'}`);
   for (const d of s.dispatches) {
     lines.push(`  ${d.dispatchId} ${d.kind} ${d.tier ?? '-'}/${d.effort} ${d.source} exit=${d.exitCode ?? '…'} applied=${d.applied ?? '-'} settings=${d.settingsChanged ?? '-'} report=${d.report ? 'yes' : 'no'}${d.escalatedFrom ? ` from=${d.escalatedFrom}` : ''}`);
   }
@@ -36,8 +36,8 @@ export async function run(argv, ctx) {
     agent: meta.agent,
     cwd: meta.cwd,
     tabs: meta.tabs.map((t) => ({
-      name: t.name, ref: t.ref, observe: t.observe, sessionId: t.sessionId,
-      lifecycle: t.observe === 'hook' ? safe(() => ctx.cmux.sessions(t.uuid, meta.agent)[0]?.agent_lifecycle) ?? null : null,
+      name: t.name, ref: t.ref, placement: t.placement ?? 'workspace', observe: t.observe, sessionId: t.sessionId,
+      lifecycle: t.observe === 'hook' ? safe(() => ctx.cmux.sessions(t, meta.agent)[0]?.agent_lifecycle) ?? null : null,
     })),
     dispatches: meta.dispatches.map((d) => ({
       dispatchId: d.dispatchId, kind: d.kind, tab: d.tab, tier: d.tier, effort: d.effort, source: d.source,
@@ -46,7 +46,7 @@ export async function run(argv, ctx) {
       report: fs.existsSync(path.join(dir, reportFileName(d.dispatchId))),
       escalatedFrom: d.escalatedFrom, remindedBy: d.remindedBy,
     })),
-    screen: v['no-screen'] ? null : safe(() => ctx.cmux.readScreen(meta.tabs[meta.tabs.length - 1].ref, 40)),
+    screen: v['no-screen'] ? null : safe(() => ctx.cmux.readScreen(meta.tabs[meta.tabs.length - 1], 40)),
   };
   if (v.json) ctx.out(status);
   else ctx.print(format(status));

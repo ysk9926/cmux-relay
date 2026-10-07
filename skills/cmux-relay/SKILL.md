@@ -1,6 +1,6 @@
 ---
 name: cmux-relay
-description: cmux 새 탭에 자식 Claude·Codex 세션을 띄워 일을 맡기고, 작업 강도에 맞는 effort 로 실행한 뒤 보고서를 돌려받을 때 사용한다. "새 탭에서 codex 로 돌려줘", "자식 세션에 맡겨줘", "병렬로 띄워서 결과만 받아줘" 같은 요청. 오케스트레이터는 Claude 세션만 맡는다.
+description: cmux 에서 오케스트레이터 옆 분할(⌘D)·새 탭에 자식 Claude·Codex 세션을 띄워 일을 맡기고, 작업 강도에 맞는 effort 로 실행한 뒤 보고서를 돌려받을 때 사용한다. "새 탭에서 codex 로 돌려줘", "자식 세션에 맡겨줘", "병렬로 띄워서 결과만 받아줘" 같은 요청. 오케스트레이터는 Claude 세션만 맡는다.
 ---
 
 # cmux 세션 릴레이
@@ -35,6 +35,8 @@ description: cmux 새 탭에 자식 Claude·Codex 세션을 띄워 일을 맡기
 1. `templates/brief.md` 를 채워 지시서 파일을 만든다. 사용자가 승인한 실행 범위만 원문으로 넣는다.
 2. `relay spawn --agent claude|codex --agent-rule <규칙> --task <id> --brief <파일> --tier E2 --tier-reason "<근거>" [--cwd <dir>] [--worktree --preset bypass]`
    - 코드를 바꾸는 작업은 `--worktree`. 조사·리뷰는 같은 체크아웃.
+   - 자식은 오케스트레이터 workspace 안에 열린다. 기본 `--placement split`(⌘D: 오른쪽, 다음 자식은 그 아래로 쌓임).
+     사용자가 탭을 원하면 `tab`(⌘T), 사이드바 workspace 를 원하면 `workspace`. `NOT_IN_CMUX` 가 나오면 `workspace` 로 다시 띄운다.
 3. 출력의 `dispatchId` 로 대기를 **백그라운드 Bash**(run_in_background)로 건다:
    `relay wait <task> --dispatch <id> --timeout <초>` — 끝나면 알림으로 깨어난다. 폴링하지 않는다.
 

@@ -82,10 +82,10 @@ function waitHook(ctx, meta, tab, after, readReport, timeoutMs) {
       resolve(verdict);
     };
     const timer = setTimeout(() => end({ exitCode: 124, reason: 'timeout' }), timeoutMs);
-    const lifecycle = () => safe(() => ctx.cmux.sessions(tab.uuid, meta.agent)[0]?.agent_lifecycle) ?? null;
+    const lifecycle = () => safe(() => ctx.cmux.sessions(tab, meta.agent)[0]?.agent_lifecycle) ?? null;
     readline.createInterface({ input: child.stdout }).on('line', (line) => {
       const e = parseEventLine(line);
-      if (!e || !isRelevant(e, tab.uuid)) return;
+      if (!e || !isRelevant(e, tab)) return;
       const verdict = verdictFor(e, { readReport, lifecycle });
       if (verdict) end({ ...verdict, seq: e.seq }); // Stop 이 두 번 와도 처음 것 하나로 끝난다
       else if (e.name === 'notification.created' || e.name === 'agent.hook.Notification') {
@@ -122,7 +122,7 @@ function finish(ctx, taskId, meta, tab, d, verdict) {
     tokens = a.tokens;
   }
   const settingsChanged = diffSnapshots(d.settingsBefore ?? {}, snapshotSettings(ctx));
-  const screen = [5, 124].includes(verdict.exitCode) ? safe(() => ctx.cmux.readScreen(tab.ref, 40)) : null;
+  const screen = [5, 124].includes(verdict.exitCode) ? safe(() => ctx.cmux.readScreen(tab, 40)) : null;
   // 기다리는 동안 다른 명령이 바꾼 meta 를 지우지 않도록 다시 읽고 이 지시 항목만 갱신한다.
   const fresh = readMeta(ctx.home, taskId);
   const fd = findDispatch(fresh, d.dispatchId);

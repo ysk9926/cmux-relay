@@ -18,7 +18,7 @@ import * as listCmd from './commands/list.mjs';
 const COMMANDS = { spawn: spawnCmd, wait: waitCmd, send: sendCmd, escalate: escalateCmd, status: statusCmd, close: closeCmd, list: listCmd };
 
 export const HELP = `relay <command> [options] — cmux 탭의 자식 Claude·Codex 세션을 띄우고 보고를 돌려받는다
-  spawn     새 탭에 자식 세션 실행 (등급·effort 필수)
+  spawn     오케스트레이터 옆 분할·탭에 자식 세션 실행 (등급·effort 필수)
   wait      완료·질문·실패·보고 없음·권한 대기·시간 초과 판정 (0·3·4·5·6·124)
   send      같은 세션에 후속 지시 또는 보고서 재요청 (/ 로 시작하는 메시지 거부)
   escalate  자동 판정 지시가 실패하면 한 등급 위로 1회 fork 재시도
@@ -34,6 +34,7 @@ function run(cmd, args) {
 export function defaultCtx(overrides = {}) {
   return {
     home: relayHome(),
+    env: process.env,
     userHome: os.homedir(),
     skillDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
     cmux: createCmux(),

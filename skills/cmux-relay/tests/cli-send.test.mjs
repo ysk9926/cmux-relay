@@ -32,7 +32,7 @@ test('send Claude: cmux send 로 한 줄 전송, 등급·effort 상속, 기준�
   const r = await runRelay(['send', 't', '--message', '다음 파일도 확인해라'], ctx);
   assert.equal(r.code, 0);
   const sent = ctx.cmux.calls.find((c) => c[0] === 'send');
-  assert.equal(sent[1], 'workspace:21');
+  assert.equal(sent[1], 'surface:11');
   assert.match(sent[2], /^\[relay 후속 지시 · dispatchId: d2-[0-9a-f]{4}\] 다음 파일도 확인해라 끝나면 /);
   const d2 = readMeta(ctx.home, 't').dispatches[1];
   assert.deepEqual([d2.kind, d2.tier, d2.effort, d2.source, d2.seq], ['followup', 'E1', 'low', 'auto', 100]);
@@ -45,7 +45,7 @@ test('send Codex: codex queue 대신 cmux send + Enter (PoC 실측: queue 는 sh
   assert.equal(r.code, 0);
   assert.equal(runs.length, 0);
   const sent = ctx.cmux.calls.find((c) => c[0] === 'send');
-  assert.equal(sent[1], 'workspace:21');
+  assert.equal(sent[1], 'surface:11');
   assert.match(sent[2], /^\[relay 후속 지시 · dispatchId: d2-[0-9a-f]{4}\] 계속해라 /);
 });
 

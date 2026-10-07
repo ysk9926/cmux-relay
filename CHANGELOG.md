@@ -4,6 +4,24 @@ English | [한국어](#한국어)
 
 Installed copies do not update automatically. Run `npx skills check` to see if an update is available and `npx skills update` to apply it.
 
+## [0.3.0] - 2026-10-07
+
+### Added
+- `relay spawn --placement split|tab|workspace`. Children now open inside the orchestrator's own workspace, so with several orchestrator sessions it is clear which children belong to which.
+  - `split` (default, like ⌘D): the first child splits to the right of the orchestrator; later children stack below the most recent open one. If that split was closed by hand, the child opens to the right of the orchestrator instead.
+  - `tab` (like ⌘T): a new tab in the focused pane of the orchestrator's workspace.
+  - `workspace`: a new sidebar workspace, as before.
+- Children open without focus and get the tab title `relay-<task>-xxxx`. The task meta records `placement` and `parent` (the orchestrator's workspace/surface), and `relay list` shows both.
+
+### Changed
+- Split/tab children are tracked by surface: `wait` matches events by `surface_id`, and session lookup, `send`, `status`, and `close` (`close-surface`) target the child's surface. This keeps the orchestrator's own Stop events in the same workspace from being picked up.
+- The launch file now does `cd <cwd>` and `export RELAY_*` before the agent command, because a split cannot take its own cwd or env.
+- `relay escalate` opens the retry with the task's placement.
+
+### Compatibility
+- The default placement changed from a new workspace to a split. `split`/`tab` need the orchestrator inside cmux (`CMUX_WORKSPACE_ID`, `CMUX_SURFACE_ID`); otherwise `relay spawn` fails with `NOT_IN_CMUX`. Pass `--placement workspace` for the old behavior.
+- Tasks created before 0.3.0 have no `placement` and are handled as `workspace`.
+
 ## [0.2.0] - 2026-10-07
 
 ### Added
@@ -48,6 +66,24 @@ See README "Known limitations" for what is not handled yet.
 ## 한국어
 
 설치한 사본은 자동으로 바뀌지 않습니다. `npx skills check` 로 업데이트가 있는지 확인하고 `npx skills update` 로 받습니다.
+
+## [0.3.0] - 2026-10-07
+
+### 추가
+- `relay spawn --placement split|tab|workspace`. 자식이 오케스트레이터 자신의 workspace 안에 열려, 여러 오케스트레이터 세션을 동시에 돌려도 어느 세션의 자식인지 구분됩니다.
+  - `split`(기본, ⌘D): 첫 자식은 오케스트레이터 오른쪽, 다음 자식은 열려 있는 직전 자식 아래로 쌓습니다. 그 분할을 사람이 닫았으면 오케스트레이터 오른쪽에 엽니다.
+  - `tab`(⌘T): 오케스트레이터 workspace 의 포커스된 pane 에 새 탭.
+  - `workspace`: 예전처럼 사이드바에 새 workspace.
+- 자식은 포커스를 가져가지 않고 탭 제목이 `relay-<task>-xxxx` 로 붙습니다. 작업 기록에 `placement`·`parent`(오케스트레이터 workspace·surface)를 남기고 `relay list` 에도 보여 줍니다.
+
+### 변경
+- 분할·탭 자식은 surface 로 추적합니다. `wait` 은 `surface_id` 로 이벤트를 고르고, 세션 조회·`send`·`status`·`close`(`close-surface`)도 자식 surface 를 지정합니다. 같은 workspace 에 있는 오케스트레이터의 Stop 이 잡히지 않게 하기 위해서입니다.
+- 분할에는 cwd·env 를 줄 수 없어, launch 파일이 에이전트 명령 전에 `cd <cwd>`·`export RELAY_*` 를 합니다.
+- `relay escalate` 는 작업과 같은 placement 로 재시도 탭을 엽니다.
+
+### 호환성
+- 기본 위치가 새 workspace 에서 분할로 바뀌었습니다. `split`·`tab` 은 오케스트레이터가 cmux 안에 있어야 하며(`CMUX_WORKSPACE_ID`·`CMUX_SURFACE_ID`), 아니면 `NOT_IN_CMUX` 로 거부합니다. 예전 동작은 `--placement workspace`.
+- 0.3.0 이전 작업은 `placement` 가 없어 `workspace` 로 처리합니다.
 
 ## [0.2.0] - 2026-10-07
 
