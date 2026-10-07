@@ -1,0 +1,42 @@
+{
+  "version": "v0",
+  "default": "claude",
+  "rules": [
+    {
+      "id": "user", "agent": "any",
+      "when": "사용자가 Claude 또는 Codex 를 지정함 / the user named the agent",
+      "signals": ["codex 로 돌려줘", "claude 로 해줘"]
+    },
+    {
+      "id": "design", "agent": "claude",
+      "when": "디자인 작업 / design work",
+      "signals": ["화면·UI/UX", "디자인 시스템", "목업·프로토타입", "시각 자료·차트 디자인"]
+    },
+    {
+      "id": "complex-logic", "agent": "codex",
+      "when": "복잡한 로직 설계 / complex logic design",
+      "signals": ["알고리즘", "상태 전이", "도메인 규칙", "정합성 계산", "구조·아키텍처 설계"]
+    },
+    {
+      "id": "cross-check", "agent": "other",
+      "when": "다른 시각의 검토·교차 확인 / independent review",
+      "signals": ["교차 검토", "second opinion"]
+    },
+    {
+      "id": "parallel", "agent": "both",
+      "when": "같은 일을 두 방식으로 비교 / compare two implementations",
+      "signals": ["병렬 구현 비교"]
+    },
+    {
+      "id": "quota", "agent": "other",
+      "when": "한쪽 사용량 한도에 가까움 / one side is near its usage limit",
+      "signals": ["사용량 한도"]
+    },
+    {
+      "id": "default", "agent": "claude",
+      "when": "그 밖의 경우 / everything else",
+      "signals": []
+    }
+  ],
+  "mixed": "디자인과 복잡한 로직이 섞이면 핵심 산출물 기준으로 고른다. 둘 다 크면 디자인은 Claude, 로직은 Codex 로 나눠 각각 띄운다."
+}

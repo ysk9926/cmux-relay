@@ -75,7 +75,7 @@ export async function run(argv, ctx) {
   ctx.cmux.send(tab.ref, text);
   meta.dispatches.push(dispatchRecord({
     dispatchId, kind, tab: tab.name, startedAt, seq,
-    tier: base.tier, model: base.model, effort: base.effort, source: base.source, reason: base.reason,
+    tier: base.tier, model: base.model, effort: base.effort, source: base.source, reason: base.reason, agentRule: base.agentRule ?? null,
     command: null, settingsBefore, remindFor: kind === 'remind' ? base.dispatchId : null,
   }));
   if (kind === 'remind') base.remindedBy = dispatchId;

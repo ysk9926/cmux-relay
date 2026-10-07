@@ -26,7 +26,7 @@ The orchestrator must be a Claude Code session running inside cmux. Children run
 
 ## How it works
 
-1. The orchestrator classifies the task as E1–E4 using `config/effort-tiers.json` and announces it in one line (a tier or effort given by the user always wins).
+1. The orchestrator picks the agent with `config/agent-policy.json` and the tier (E1–E4) with `config/effort-tiers.json`, then announces both in one line (anything the user specifies always wins).
 2. `relay spawn` opens a new tab and launches the child with the fixed model plus the tier's effort as launch flags.
 3. Run `relay wait` in the background; it wakes up when the child writes this dispatch's `report-<dispatchId>.json` and ends its turn.
 4. On exit it compares the actually applied model/effort from the child's session transcript, and checks that no global effort setting changed.
@@ -34,7 +34,7 @@ The orchestrator must be a Claude Code session running inside cmux. Children run
 
 ```bash
 R="node ~/.claude/skills/cmux-relay/scripts/relay.mjs"
-$R spawn --agent claude --task docfix --brief brief.md --tier E2 --tier-reason "edit one well-scoped document"
+$R spawn --agent claude --agent-rule default --task docfix --brief brief.md --tier E2 --tier-reason "edit one well-scoped document"
 $R wait docfix --dispatch d1-xxxx --timeout 300     # run in the background
 $R send docfix --message "also check the next file"  # follow-up in the same session
 $R escalate docfix --from d1-xxxx                    # one escalation on failure
@@ -43,6 +43,22 @@ $R close docfix
 ```
 
 Every subcommand has `--help` and `--dry-run`. The work folder is `~/.agent-relay/` (override with `RELAY_HOME`).
+
+## Agent selection
+
+The first matching rule wins (`skills/cmux-relay/config/agent-policy.json`).
+
+| Order | Rule | When | Agent |
+|---|---|---|---|
+| 1 | `user` | the user named the agent | as specified |
+| 2 | `design` | design work: screens, UI/UX, design systems, mockups, visuals | Claude |
+| 3 | `complex-logic` | complex logic design: algorithms, state transitions, domain rules, consistency calculations, architecture | Codex |
+| 4 | `cross-check` | independent review | the other agent |
+| 5 | `parallel` | compare two implementations | both (one each) |
+| 6 | `quota` | one side is near its usage limit | the other agent |
+| 7 | `default` | everything else | Claude |
+
+If design and complex logic are mixed, choose by the main deliverable; if both are large, split them and spawn Claude for the design part and Codex for the logic part. Pass the rule with `--agent-rule <id>`; `relay spawn` rejects a rule that contradicts `--agent`. Agent and tier are chosen independently (e.g. settlement logic design = Codex · E4).
 
 ## Effort tiers (draft v0)
 
@@ -123,7 +139,7 @@ npx skills add ysk9926/cmux-relay@cmux-relay -g -y
 
 ### 동작 흐름
 
-1. 오케스트레이터가 업무 강도를 `config/effort-tiers.json` 기준으로 E1~E4 로 판정하고 한 줄로 알립니다(사용자가 지정하면 그 값이 우선).
+1. 오케스트레이터가 에이전트는 `config/agent-policy.json`, 업무 강도(E1~E4)는 `config/effort-tiers.json` 기준으로 정하고 한 줄로 알립니다(사용자가 지정하면 그 값이 우선).
 2. `relay spawn` 이 새 탭을 열고 고정 모델 + 등급별 effort 를 실행 플래그로 붙여 자식을 띄웁니다.
 3. `relay wait` 을 백그라운드로 걸어 두면, 자식이 이번 지시의 `report-<dispatchId>.json` 을 쓰고 턴을 마칠 때 깨어납니다.
 4. 끝날 때 자식 세션 기록에서 실제 model·effort 를 대조하고, effort 관련 전역 설정이 바뀌지 않았는지 확인합니다.
@@ -131,7 +147,7 @@ npx skills add ysk9926/cmux-relay@cmux-relay -g -y
 
 ```bash
 R="node ~/.claude/skills/cmux-relay/scripts/relay.mjs"
-$R spawn --agent claude --task docfix --brief brief.md --tier E2 --tier-reason "범위가 정해진 문서 한 개 수정"
+$R spawn --agent claude --agent-rule default --task docfix --brief brief.md --tier E2 --tier-reason "범위가 정해진 문서 한 개 수정"
 $R wait docfix --dispatch d1-xxxx --timeout 300     # 백그라운드로 실행
 $R send docfix --message "다음 파일도 확인해라"       # 같은 세션에 후속 지시
 $R escalate docfix --from d1-xxxx                    # 실패 시 1회 승급
@@ -140,6 +156,22 @@ $R close docfix
 ```
 
 모든 하위 명령에 `--help`·`--dry-run` 이 있습니다. 작업 폴더는 `~/.agent-relay/`(환경변수 `RELAY_HOME` 으로 변경 가능)입니다.
+
+### 에이전트 선택
+
+위에서부터 먼저 맞는 규칙을 적용합니다(`skills/cmux-relay/config/agent-policy.json`).
+
+| 순서 | 규칙 | 상황 | 에이전트 |
+|---|---|---|---|
+| 1 | `user` | 사용자가 지정함 | 지정한 쪽 |
+| 2 | `design` | 디자인 작업: 화면·UI/UX·디자인 시스템·목업·시각 자료 | Claude |
+| 3 | `complex-logic` | 복잡한 로직 설계: 알고리즘·상태 전이·도메인 규칙·정합성 계산·구조 설계 | Codex |
+| 4 | `cross-check` | 다른 시각의 검토·교차 확인 | 직전 작업과 다른 쪽 |
+| 5 | `parallel` | 같은 일을 두 방식으로 비교 | 둘 다(각 1개) |
+| 6 | `quota` | 한쪽 사용량 한도에 가까움 | 다른 쪽 |
+| 7 | `default` | 그 밖의 경우 | Claude |
+
+디자인과 복잡한 로직이 섞이면 핵심 산출물 기준으로 고르고, 둘 다 크면 디자인은 Claude, 로직은 Codex 로 나눠 각각 띄웁니다. 고른 규칙은 `--agent-rule <id>` 로 넘기며, 규칙과 `--agent` 가 맞지 않으면 `relay spawn` 이 거부합니다. 에이전트와 등급은 따로 정합니다(예: 정산 로직 설계 = Codex · E4).
 
 ### 등급 기준표 (초안 v0)
 

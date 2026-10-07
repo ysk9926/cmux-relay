@@ -78,6 +78,7 @@ export function buildEffortLogEntry({ taskId, agent, dispatch: d }) {
     tokens: d.tokens ?? null,
     applied: d.applied?.status ?? 'unverified',
     escalatedFrom: d.escalatedFrom ?? null,
+    agentRule: d.agentRule ?? null,
     wait: d.waitCount ?? 1, // 같은 지시를 다시 기다리면(5·124 뒤) 회차가 늘어난다. 집계는 지시별 마지막 줄을 쓴다
   };
 }

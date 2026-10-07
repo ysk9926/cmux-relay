@@ -7,10 +7,12 @@ import { checkPreset, claudeArgs, codexArgs, toCommand, launchFileName, sourceCo
 import { newDispatchId, startPrompt } from '../lib/dispatch.mjs';
 import { validateTaskId, taskDir, createTask, writeFile600, writeMeta } from '../lib/store.mjs';
 import { RelayError } from '../lib/errors.mjs';
-import { readTiers, snapshotSettings, poll, dispatchRecord, pickRequested } from './common.mjs';
+import { checkAgentRule } from '../lib/agent-policy.mjs';
+import { readTiers, readAgentPolicy, snapshotSettings, poll, dispatchRecord, pickRequested } from './common.mjs';
 
 export const HELP = `relay spawn — 새 cmux 탭에 자식 세션을 띄운다
   --agent claude|codex                     (필수)
+  --agent-rule <id>                        에이전트 선택 규칙(config/agent-policy.json): user|design|complex-logic|cross-check|parallel|quota|default
   --task <id>                              작업 ID: 소문자·숫자·하이픈 (필수)
   --brief <file>                           지시서 파일 (필수)
   --tier E1..E4 --tier-reason "<근거>"      자동 판정 등급
@@ -25,7 +27,7 @@ export async function run(argv, ctx) {
   const { values: v } = parseArgs({
     args: argv,
     options: {
-      agent: { type: 'string' }, task: { type: 'string' }, brief: { type: 'string' },
+      agent: { type: 'string' }, 'agent-rule': { type: 'string' }, task: { type: 'string' }, brief: { type: 'string' },
       tier: { type: 'string' }, 'tier-reason': { type: 'string' }, effort: { type: 'string' },
       cwd: { type: 'string' }, worktree: { type: 'boolean', default: false },
       preset: { type: 'string', default: 'safe' }, context: { type: 'string', default: 'brief' },
@@ -40,6 +42,7 @@ export async function run(argv, ctx) {
   if (v.context !== 'brief') throw new RelayError('NOT_IMPLEMENTED', '--context fork|transfer is planned for phase 6');
   checkPreset({ preset: v.preset, worktree: v.worktree });
   const r = resolveEffort(readTiers(ctx), { agent: v.agent, tier: v.tier, tierReason: v['tier-reason'], effort: v.effort });
+  const agentRule = checkAgentRule(readAgentPolicy(ctx), { rule: v['agent-rule'], agent: v.agent });
   if (!v.brief || !fs.existsSync(v.brief)) throw new RelayError('BRIEF_NOT_FOUND', `brief not found: ${v.brief}`);
 
   const dry = v['dry-run'];
@@ -76,7 +79,7 @@ export async function run(argv, ctx) {
   if (dry) {
     plan.push(['cmux', 'new-workspace', '--name', tabName, '--cwd', cwd,
       ...Object.entries(env).flatMap(([k, val]) => ['--env', `${k}=${val}`]), '--command', typed]);
-    ctx.out({ dryRun: true, taskDir: dir, dispatchId, requested: pickRequested(r), launch: command, plan });
+    ctx.out({ dryRun: true, taskDir: dir, dispatchId, requested: pickRequested(r), agentRule, launch: command, plan });
     return 0;
   }
 
@@ -105,9 +108,9 @@ export async function run(argv, ctx) {
   const meta = {
     version: 1, taskId: v.task, agent: v.agent, cwd, worktree: v.worktree, preset: v.preset, createdAt: startedAt,
     tabs: [{ name: tabName, ref, uuid: ws.uuid, sessionId: sess?.session_id ?? null, transcriptPath: sess?.transcript_path ?? null, observe: 'hook' }],
-    dispatches: [dispatchRecord({ dispatchId, kind: 'start', tab: tabName, startedAt, seq, ...pickRequested(r), reason: r.reason, command, launchFile, settingsBefore })],
+    dispatches: [dispatchRecord({ dispatchId, kind: 'start', tab: tabName, startedAt, seq, ...pickRequested(r), reason: r.reason, agentRule, command, launchFile, settingsBefore })],
   };
   writeMeta(ctx.home, v.task, meta);
-  ctx.out({ taskId: v.task, dispatchId, ref, uuid: ws.uuid, sessionId: meta.tabs[0].sessionId, requested: pickRequested(r), warnings: sess ? [] : ['session-not-found'] });
+  ctx.out({ taskId: v.task, dispatchId, ref, uuid: ws.uuid, sessionId: meta.tabs[0].sessionId, requested: pickRequested(r), agentRule, warnings: sess ? [] : ['session-not-found'] });
   return 0;
 }

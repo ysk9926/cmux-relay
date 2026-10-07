@@ -7,16 +7,33 @@ description: cmux 새 탭에 자식 Claude·Codex 세션을 띄워 일을 맡기
 
 `relay`는 `node ~/.claude/skills/cmux-relay/scripts/relay.mjs` 이다. 모든 명령에 `--help`·`--dry-run` 이 있다.
 
-## 1. 등급 판정 (띄우기 전 매번)
+## 1. 판정 (띄우기 전 매번)
+### 1-a. 에이전트 (`config/agent-policy.json`, 위에서부터 먼저 맞는 규칙)
+| 순서 | 규칙 | 상황 | 에이전트 |
+|---|---|---|---|
+| 1 | `user` | 사용자가 Claude·Codex 를 지정함 | 지정한 쪽 |
+| 2 | `design` | 디자인 작업: 화면·UI/UX·디자인 시스템·목업·시각 자료 | Claude |
+| 3 | `complex-logic` | 복잡한 로직 설계: 알고리즘·상태 전이·도메인 규칙·정합성 계산·구조 설계 | Codex |
+| 4 | `cross-check` | 다른 시각의 검토·교차 확인 | 직전 작업과 다른 쪽 |
+| 5 | `parallel` | 같은 일을 두 방식으로 비교 | 둘 다(각각 spawn) |
+| 6 | `quota` | 한쪽 사용량 한도에 가까움 | 다른 쪽 |
+| 7 | `default` | 그 밖의 경우 | Claude |
+
+- 디자인과 복잡한 로직이 섞이면 핵심 산출물 기준. 둘 다 크면 디자인은 Claude, 로직은 Codex 로 **나눠 각각 띄운다**.
+- 고른 규칙을 `--agent-rule <id>` 로 넘긴다. 규칙과 `--agent` 가 맞지 않으면 spawn 이 거부한다.
+
+### 1-b. 등급 (effort)
 1. 사용자가 등급(E1~E4)이나 effort 를 말했으면 그 값을 쓴다 → `--effort <레벨>` (`max`·`ultra` 는 이 경로로만).
 2. 아니면 `config/effort-tiers.json` 의 signals 를 보고 **해당하는 신호 중 가장 높은 등급**을 고른다. 애매하면 한 등급 위.
-   금액·재고·정산·권한·DB 스키마를 건드리면 한 줄이라도 E4.
-3. 띄우기 직전 사용자에게 한 줄로 알리고 승인은 기다리지 않는다:
-   `E2(보통) · Claude opus / effort medium 으로 띄웁니다 — 근거: <한 줄>`
+   금액·재고·정산·권한·DB 스키마를 건드리면 한 줄이라도 E4. 에이전트와 등급은 따로 정한다(예: 정산 로직 설계 = Codex · E4).
+
+### 1-c. 알림
+띄우기 직전 사용자에게 한 줄로 알리고 승인은 기다리지 않는다:
+`Codex · E4(xhigh) 로 띄웁니다 — 규칙: complex-logic, 근거: <한 줄>`
 
 ## 2. 실행
 1. `templates/brief.md` 를 채워 지시서 파일을 만든다. 사용자가 승인한 실행 범위만 원문으로 넣는다.
-2. `relay spawn --agent claude|codex --task <id> --brief <파일> --tier E2 --tier-reason "<근거>" [--cwd <dir>] [--worktree --preset bypass]`
+2. `relay spawn --agent claude|codex --agent-rule <규칙> --task <id> --brief <파일> --tier E2 --tier-reason "<근거>" [--cwd <dir>] [--worktree --preset bypass]`
    - 코드를 바꾸는 작업은 `--worktree`. 조사·리뷰는 같은 체크아웃.
 3. 출력의 `dispatchId` 로 대기를 **백그라운드 Bash**(run_in_background)로 건다:
    `relay wait <task> --dispatch <id> --timeout <초>` — 끝나면 알림으로 깨어난다. 폴링하지 않는다.

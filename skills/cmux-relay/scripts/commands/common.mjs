@@ -1,11 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadTiers } from '../lib/effort.mjs';
+import { loadAgentPolicy } from '../lib/agent-policy.mjs';
 import { extractClaudeSettings, extractCodexConfig } from '../lib/settings-guard.mjs';
 import { RelayError } from '../lib/errors.mjs';
 
 export const CLAUDE_SETTINGS = '~/.claude/settings.json';
 export const CODEX_CONFIG = '~/.codex/config.toml';
+
+export function readAgentPolicy(ctx) {
+  return loadAgentPolicy(fs.readFileSync(path.join(ctx.skillDir, 'config', 'agent-policy.json'), 'utf8'));
+}
 
 export function readTiers(ctx) {
   return loadTiers(fs.readFileSync(path.join(ctx.skillDir, 'config', 'effort-tiers.json'), 'utf8'));

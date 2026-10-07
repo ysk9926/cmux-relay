@@ -84,7 +84,7 @@ export async function run(argv, ctx) {
     tab = { name: tabName, ref, uuid: ws.uuid, sessionId: f?.id ?? null, transcriptPath: null, observe: 'rollout', warnings: f ? f.warnings : ['fork-not-found'] };
   }
   meta.tabs.push(tab);
-  meta.dispatches.push(dispatchRecord({ dispatchId, kind: 'escalate', tab: tabName, startedAt, seq, ...pickRequested(r), reason: r.reason, command, launchFile, settingsBefore, escalatedFrom: from.dispatchId }));
+  meta.dispatches.push(dispatchRecord({ dispatchId, kind: 'escalate', tab: tabName, startedAt, seq, ...pickRequested(r), reason: r.reason, agentRule: from.agentRule ?? null, command, launchFile, settingsBefore, escalatedFrom: from.dispatchId }));
   from.escalatedTo = dispatchId;
   writeMeta(ctx.home, taskId, meta);
   ctx.out({ dispatchId, decision, requested: pickRequested(r), ref, sessionId: tab.sessionId, observe: tab.observe, warnings: tab.warnings ?? [] });
