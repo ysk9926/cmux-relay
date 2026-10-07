@@ -35,11 +35,11 @@ The orchestrator must be a Claude Code session running inside cmux. Children ope
 ```bash
 R="node ~/.claude/skills/cmux-relay/scripts/relay.mjs"
 $R spawn --agent claude --agent-rule default --task docfix --brief brief.md --tier E2 --tier-reason "edit one well-scoped document"
-$R wait docfix --dispatch d1-xxxx --timeout 300     # run in the background
-$R send docfix --message "also check the next file"  # follow-up in the same session
+$R wait docfix --dispatch d1-xxxx --timeout 300     # run in the background; closes the tabs on done (0)
+$R send docfix --message "also check the next file"  # follow-up in the same session (after 3, or wait --keep-open)
 $R escalate docfix --from d1-xxxx                    # one escalation on failure
 $R status docfix
-$R close docfix
+$R close docfix                                      # tabs still open after 3·4·5·6·124
 ```
 
 Every subcommand has `--help` and `--dry-run`. The work folder is `~/.agent-relay/` (override with `RELAY_HOME`).
@@ -97,6 +97,8 @@ Change the fixed models (default Claude `opus`, Codex `gpt-6.1-sol`) and levels 
 | 6 | waiting for permission or input |
 | 124 | timeout |
 | 2 | relay error (`{error, message}` JSON) |
+
+On 0, `relay wait` closes every open tab of the task, including a failed tab left from before an escalation, and returns `cleanup: {closed, failed}`. The task folder, report, session transcripts, and worktree are kept. A closed task rejects `relay send` with `TASK_CLOSED`, so pass `--keep-open` when you plan to send follow-ups to the same child. Any other exit code leaves the tabs open for answers, escalation, or diagnosis.
 
 ## Safety
 
@@ -168,11 +170,11 @@ npx skills add ysk9926/cmux-relay@cmux-relay -g -y
 ```bash
 R="node ~/.claude/skills/cmux-relay/scripts/relay.mjs"
 $R spawn --agent claude --agent-rule default --task docfix --brief brief.md --tier E2 --tier-reason "범위가 정해진 문서 한 개 수정"
-$R wait docfix --dispatch d1-xxxx --timeout 300     # 백그라운드로 실행
-$R send docfix --message "다음 파일도 확인해라"       # 같은 세션에 후속 지시
+$R wait docfix --dispatch d1-xxxx --timeout 300     # 백그라운드로 실행, 완료(0)면 탭을 닫음
+$R send docfix --message "다음 파일도 확인해라"       # 같은 세션에 후속 지시 (3 뒤, 또는 wait --keep-open)
 $R escalate docfix --from d1-xxxx                    # 실패 시 1회 승급
 $R status docfix
-$R close docfix
+$R close docfix                                      # 3·4·5·6·124 뒤 남은 탭 정리
 ```
 
 모든 하위 명령에 `--help`·`--dry-run` 이 있습니다. 작업 폴더는 `~/.agent-relay/`(환경변수 `RELAY_HOME` 으로 변경 가능)입니다.
@@ -230,6 +232,8 @@ $R close docfix
 | 6 | 권한·입력 대기 |
 | 124 | 시간 초과 |
 | 2 | relay 오류(`{error, message}` JSON) |
+
+0 이면 `relay wait` 이 작업의 열린 탭을 모두 닫고(승급 전 실패 탭 포함) `cleanup: {closed, failed}` 를 돌려줍니다. 작업 폴더·보고서·세션 기록·worktree 는 남습니다. 닫힌 작업은 `relay send` 를 `TASK_CLOSED` 로 거부하므로, 같은 자식에게 후속 지시를 보낼 계획이면 `--keep-open` 을 붙입니다. 그 밖의 종료코드는 답변·승급·진단을 위해 탭을 그대로 둡니다.
 
 ### 안전 원칙
 

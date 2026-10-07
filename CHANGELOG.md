@@ -4,6 +4,19 @@ English | [한국어](#한국어)
 
 Installed copies do not update automatically. Run `npx skills check` to see if an update is available and `npx skills update` to apply it.
 
+## [0.4.0] - 2026-10-07
+
+### Added
+- `relay wait` closes every open tab of the task when the child reports done (exit 0), including a failed tab left from before an escalation. The output has `cleanup: {closed, failed}`. The task folder, report, session transcripts, and worktree are kept.
+- `relay wait --keep-open` skips the cleanup, for when you plan to send follow-ups to the same child.
+- `relay send` on a closed task fails with `TASK_CLOSED` instead of a cmux error.
+
+### Changed
+- `relay close` skips tabs that are already closed and marks each closed tab (`closed: true`). The task gets `closedAt` only once all its tabs are closed, so a failed close leaves the task open for a retry.
+
+### Compatibility
+- Exit codes 3, 4, 5, 6, and 124 leave the tabs open as before. A flow that sent a follow-up after a done (0) wait now needs `--keep-open`.
+
 ## [0.3.0] - 2026-10-07
 
 ### Added
@@ -66,6 +79,19 @@ See README "Known limitations" for what is not handled yet.
 ## 한국어
 
 설치한 사본은 자동으로 바뀌지 않습니다. `npx skills check` 로 업데이트가 있는지 확인하고 `npx skills update` 로 받습니다.
+
+## [0.4.0] - 2026-10-07
+
+### 추가
+- 자식이 완료(종료코드 0)를 보고하면 `relay wait` 이 작업의 열린 탭을 모두 닫습니다(승급 전 실패 탭 포함). 출력에 `cleanup: {closed, failed}` 가 붙습니다. 작업 폴더·보고서·세션 기록·worktree 는 남습니다.
+- `relay wait --keep-open`: 같은 자식에게 후속 지시를 보낼 계획이면 정리를 건너뜁니다.
+- 닫힌 작업에 `relay send` 를 하면 cmux 오류 대신 `TASK_CLOSED` 로 거부합니다.
+
+### 변경
+- `relay close` 는 이미 닫은 탭을 건너뛰고, 닫은 탭에 `closed: true` 를 남깁니다. 작업의 `closedAt` 은 탭을 모두 닫았을 때만 남겨, 닫기에 실패하면 열린 작업으로 두고 다시 시도할 수 있습니다.
+
+### 호환성
+- 종료코드 3·4·5·6·124 는 예전처럼 탭을 남깁니다. 완료(0) 뒤에 후속 지시를 보내던 흐름은 `--keep-open` 이 필요합니다.
 
 ## [0.3.0] - 2026-10-07
 

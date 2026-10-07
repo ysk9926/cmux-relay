@@ -144,3 +144,60 @@ test('wait --dry-run, --dispatch 없음은 USAGE', async () => {
   const bad = await runRelay(['wait', 't'], ctx);
   assert.equal(bad.last.error, 'USAGE');
 });
+
+test('완료(0)면 작업의 탭을 모두 닫고(승급 전 탭 포함) closedAt 을 남긴다, 작업 폴더는 보존, 이후 send 는 TASK_CLOSED', async () => {
+  const { ctx, d1 } = await spawned();
+  const meta = readMeta(ctx.home, 't');
+  meta.tabs.push({ ...meta.tabs[0], name: `${meta.tabs[0].name}-e`, ref: 'surface:12', surface: SURFACES[1] });
+  writeMeta(ctx.home, 't', meta);
+  writeReport(ctx, d1, 'done');
+  const p = runRelay(['wait', 't', '--dispatch', d1, '--timeout', '5'], ctx);
+  await tick();
+  ctx.cmux.streams[0].stdout.write(ev('agent.hook.Stop', 170));
+  const r = await p;
+  assert.equal(r.code, 0);
+  assert.deepEqual(r.last.cleanup, { closed: ['surface:11', 'surface:12'], failed: [] });
+  assert.deepEqual(ctx.cmux.calls.filter((c) => c[0] === 'close').map((c) => c[1]), ['surface:11', 'surface:12']);
+  const after = readMeta(ctx.home, 't');
+  assert.ok(after.closedAt);
+  assert.deepEqual(after.tabs.map((t) => t.closed), [true, true]);
+  assert.equal(after.dispatches[0].exitCode, 0);
+  assert.ok(fs.existsSync(path.join(ctx.home, 'tasks/t', `report-${d1}.json`)));
+  const again = await runRelay(['close', 't'], ctx);
+  assert.deepEqual([again.code, again.last.closed], [0, []]);
+  const send = await runRelay(['send', 't', '--message', '하나 더'], ctx);
+  assert.deepEqual([send.code, send.last.error], [2, 'TASK_CLOSED']);
+});
+
+test('--keep-open 이면 완료여도 탭을 남기고, 질문(3)·실패(4)는 닫지 않는다', async () => {
+  for (const [status, args, code] of [['done', ['--keep-open'], 0], ['needs_input', [], 3], ['failed', [], 4]]) {
+    const { ctx, d1 } = await spawned();
+    writeReport(ctx, d1, status);
+    const p = runRelay(['wait', 't', '--dispatch', d1, '--timeout', '5', ...args], ctx);
+    await tick();
+    ctx.cmux.streams[0].stdout.write(ev('agent.hook.Stop', 180));
+    const r = await p;
+    assert.deepEqual([r.code, r.last.cleanup], [code, null], status);
+    assert.equal(ctx.cmux.calls.filter((c) => c[0] === 'close').length, 0, status);
+    assert.equal(readMeta(ctx.home, 't').closedAt, undefined, status);
+  }
+});
+
+test('완료 뒤 탭 닫기가 실패해도 판정은 0, cleanup.failed 로 알리고 열린 작업으로 남겨 다음 close 때 다시 시도', async () => {
+  const { ctx, d1 } = await spawned();
+  writeReport(ctx, d1, 'done');
+  ctx.cmux.close = () => {
+    throw new Error('cmux close-surface failed: socket');
+  };
+  const p = runRelay(['wait', 't', '--dispatch', d1, '--timeout', '5'], ctx);
+  await tick();
+  ctx.cmux.streams[0].stdout.write(ev('agent.hook.Stop', 190));
+  const r = await p;
+  assert.equal(r.code, 0);
+  assert.deepEqual(r.last.cleanup.failed, [{ ref: 'surface:11', error: 'cmux close-surface failed: socket' }]);
+  const left = readMeta(ctx.home, 't');
+  assert.deepEqual([left.tabs[0].closed, left.closedAt], [undefined, undefined]);
+  ctx.cmux.close = () => {};
+  assert.deepEqual((await runRelay(['close', 't'], ctx)).last.closed, ['surface:11']);
+  assert.ok(readMeta(ctx.home, 't').closedAt);
+});

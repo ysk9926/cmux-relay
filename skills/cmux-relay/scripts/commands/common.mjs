@@ -5,7 +5,7 @@ import { loadAgentPolicy } from '../lib/agent-policy.mjs';
 import { extractClaudeSettings, extractCodexConfig } from '../lib/settings-guard.mjs';
 import { RelayError } from '../lib/errors.mjs';
 import { callerOf } from '../lib/launch.mjs';
-import { listTasks, readMeta } from '../lib/store.mjs';
+import { listTasks, readMeta, writeMeta } from '../lib/store.mjs';
 
 export const CLAUDE_SETTINGS = '~/.claude/settings.json';
 export const CODEX_CONFIG = '~/.codex/config.toml';
@@ -153,4 +153,25 @@ export function childPlan(ctx, { placement, name, cwd, env, command }) {
   if (placement === 'tab') return ['cmux', 'new-surface', '--workspace', parent.workspace, '--working-directory', cwd, '--command', command];
   const below = lastSplitSibling(ctx, parent);
   return ['cmux', 'new-split', below ? 'down' : 'right', '--workspace', parent.workspace, '--surface', below ?? parent.surface, '--command', command];
+}
+
+// 작업의 열린 탭을 모두 닫는다. 작업 폴더·세션 기록·worktree 는 남긴다. 이미 닫은 탭은 건너뛴다.
+export function closeTabs(ctx, taskId) {
+  const meta = readMeta(ctx.home, taskId);
+  const closed = [];
+  const failed = [];
+  for (const tab of meta.tabs) {
+    if (tab.closed) continue;
+    try {
+      ctx.cmux.close(tab);
+      tab.closed = true;
+      closed.push(tab.ref);
+    } catch (e) {
+      failed.push({ ref: tab.ref, error: e.message });
+    }
+  }
+  // 하나라도 못 닫았으면 열린 작업으로 둔다(send 가 막히지 않고, split 형제로도 계속 쓴다)
+  if (meta.tabs.every((t) => t.closed)) meta.closedAt ??= ctx.now().toISOString();
+  writeMeta(ctx.home, taskId, meta);
+  return { closed, failed };
 }

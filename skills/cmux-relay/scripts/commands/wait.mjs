@@ -12,12 +12,13 @@ import { buildEffortLogEntry } from '../lib/effort.mjs';
 import { findClaudeTranscript, findCodexRollout, readLines } from '../lib/transcripts.mjs';
 import { readMeta, writeMeta, taskDir, appendEffortLog } from '../lib/store.mjs';
 import { RelayError } from '../lib/errors.mjs';
-import { snapshotSettings, findDispatch, findTab, safe, requirePositional } from './common.mjs';
+import { snapshotSettings, findDispatch, findTab, safe, requirePositional, closeTabs } from './common.mjs';
 
 export const HELP = `relay wait — 지시 하나의 결과를 판정한다 (백그라운드 Bash 로 실행)
-  relay wait <task> --dispatch <id> [--timeout 초(기본 300)] [--dry-run]
+  relay wait <task> --dispatch <id> [--timeout 초(기본 300)] [--keep-open] [--dry-run]
 종료코드: 0 완료 · 3 질문 보고 · 4 실패 · 5 보고 없이 멈춤 · 6 권한 대기 · 124 시간 초과
 끝날 때 실제 model·effort 대조(applied)와 전역 설정 변화(settingsChanged)를 함께 출력한다.
+0(완료)이면 작업의 탭을 모두 닫는다(작업 폴더·세션 기록 보존). 후속 지시를 보낼 거면 --keep-open.
 codex fork 탭은 훅 이벤트가 없어 rollout 으로 완료를 보며, 권한 대기는 감지하지 못한다.`;
 
 export async function run(argv, ctx) {
@@ -25,7 +26,7 @@ export async function run(argv, ctx) {
     args: argv,
     allowPositionals: true,
     options: {
-      dispatch: { type: 'string' }, timeout: { type: 'string', default: '300' },
+      dispatch: { type: 'string' }, timeout: { type: 'string', default: '300' }, 'keep-open': { type: 'boolean', default: false },
       'dry-run': { type: 'boolean', default: false }, help: { type: 'boolean', default: false },
     },
   });
@@ -55,7 +56,7 @@ export async function run(argv, ctx) {
   const verdict = tab.observe === 'rollout'
     ? await waitRollout(ctx, meta, tab, d, readReport, timeoutMs)
     : await waitHook(ctx, meta, tab, after, readReport, timeoutMs);
-  return finish(ctx, taskId, meta, tab, d, verdict);
+  return finish(ctx, taskId, meta, tab, d, verdict, { keepOpen: v['keep-open'] });
 }
 
 function transcriptOf(ctx, meta, tab) {
@@ -112,7 +113,7 @@ async function waitRollout(ctx, meta, tab, d, readReport, timeoutMs) {
   return { exitCode: 124, reason: 'timeout' };
 }
 
-function finish(ctx, taskId, meta, tab, d, verdict) {
+function finish(ctx, taskId, meta, tab, d, verdict, { keepOpen }) {
   const transcript = transcriptOf(ctx, meta, tab);
   let applied = { status: 'unverified', matches: false, warnings: ['no-transcript'] };
   let tokens = null;
@@ -138,6 +139,8 @@ function finish(ctx, taskId, meta, tab, d, verdict) {
   });
   writeMeta(ctx.home, taskId, fresh);
   if (verdict.exitCode !== 6) appendEffortLog(ctx.home, buildEffortLogEntry({ taskId, agent: meta.agent, dispatch: fd }));
+  // 완료 보고가 오면 탭을 정리한다. 닫기에 실패해도 판정(0)은 바꾸지 않고 cleanup.failed 로 알린다.
+  const cleanup = verdict.exitCode === 0 && !keepOpen ? closeTabs(ctx, taskId) : null;
   ctx.out({
     exitCode: verdict.exitCode,
     reason: verdict.reason,
@@ -148,6 +151,7 @@ function finish(ctx, taskId, meta, tab, d, verdict) {
     report: verdict.report ?? null,
     screen,
     evidence: { seq: verdict.seq ?? null, transcript },
+    cleanup,
   });
   return verdict.exitCode;
 }

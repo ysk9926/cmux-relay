@@ -31,6 +31,7 @@ export async function run(argv, ctx) {
     throw new RelayError('SEND_MODE', 'pass exactly one of --message, --file, --remind');
   }
   const meta = readMeta(ctx.home, taskId);
+  if (meta.closedAt) throw new RelayError('TASK_CLOSED', `tabs of ${taskId} were closed at ${meta.closedAt}; spawn a new task (use wait --keep-open to keep the session for follow-ups)`);
   const dir = taskDir(ctx.home, taskId);
   const dry = v['dry-run'];
   const n = meta.dispatches.length + 1;

@@ -39,11 +39,12 @@ description: cmux 에서 오케스트레이터 옆 분할(⌘D)·새 탭에 자�
      사용자가 탭을 원하면 `tab`(⌘T), 사이드바 workspace 를 원하면 `workspace`. `NOT_IN_CMUX` 가 나오면 `workspace` 로 다시 띄운다.
 3. 출력의 `dispatchId` 로 대기를 **백그라운드 Bash**(run_in_background)로 건다:
    `relay wait <task> --dispatch <id> --timeout <초>` — 끝나면 알림으로 깨어난다. 폴링하지 않는다.
+   완료(0)면 wait 이 자식 탭을 닫는다. 같은 자식에게 후속 지시를 보낼 계획이면 `--keep-open` 을 붙인다.
 
 ## 3. 깨어난 뒤 (종료코드)
 | 코드 | 처리 |
 |---|---|
-| 0 | 보고서의 changes·verification 을 **직접 다시 확인**한 뒤 사용자에게 보고 |
+| 0 | 보고서의 changes·verification 을 **직접 다시 확인**한 뒤 사용자에게 보고. 탭은 이미 닫혔다(`cleanup`). `cleanup.failed` 가 있으면 함께 알린다 |
 | 3 | 보고서 questions 를 사용자에게 그대로 전달 → 답을 `relay send <task> --message` |
 | 4 | 자동 판정 지시면 `relay escalate <task> --from <id>` 후 새 dispatchId 로 wait. 거부되면 사용자에게 보고 |
 | 5 | 출력 screen 에서 질문을 찾으면 사용자에게 전달. 없으면 `relay send <task> --remind <id>` → wait → 또 5면 `relay escalate` |
@@ -61,5 +62,6 @@ description: cmux 에서 오케스트레이터 옆 분할(⌘D)·새 탭에 자�
 - 자식이 보고한 값을 그대로 믿지 않는다. 변경과 검증은 직접 다시 확인한다.
 
 ## 5. 정리
-사용자가 확인하면 `relay close <task>`. 작업 폴더 `~/.agent-relay/tasks/<task>/` 와 세션 기록은 남는다.
+완료(0)는 `relay wait` 이 탭을 닫는다. 그 밖의 경우(질문·실패 뒤 그만두기 등)는 사용자가 확인하면 `relay close <task>`.
+어느 쪽이든 작업 폴더 `~/.agent-relay/tasks/<task>/`·세션 기록·worktree 는 남는다.
 effort 기록은 `~/.agent-relay/effort-log.jsonl` 에 쌓이며, 기준표 확정(계획 9단계)의 근거가 된다.
