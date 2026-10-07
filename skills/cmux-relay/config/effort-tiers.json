@@ -1,0 +1,35 @@
+{
+  "version": "v0-draft",
+  "models": { "claude": "opus", "codex": "gpt-6.1-sol" },
+  "levels": {
+    "claude": ["low", "medium", "high", "xhigh", "max"],
+    "codex": ["low", "medium", "high", "xhigh", "max", "ultra"]
+  },
+  "tiers": [
+    {
+      "id": "E1", "name": "가벼움",
+      "signals": ["읽기 전용", "정답이 정해져 있음", "결과를 바로 확인할 수 있음"],
+      "examples": ["파일·로그 찾기", "요약", "형식 변환", "오탈자"],
+      "effort": { "claude": "low", "codex": "low" }
+    },
+    {
+      "id": "E2", "name": "보통",
+      "signals": ["범위가 정해진 1~2개 파일 수정", "정해진 절차 실행", "문서 작성"],
+      "examples": ["문구 수정", "보고서 초안", "정해진 스크립트 실행"],
+      "effort": { "claude": "medium", "codex": "medium" }
+    },
+    {
+      "id": "E3", "name": "무거움",
+      "signals": ["여러 파일·모듈에 걸친 구현", "원인 조사·디버깅", "테스트 작성"],
+      "examples": ["기능 구현", "버그 원인 분석", "리팩터링"],
+      "effort": { "claude": "high", "codex": "high" }
+    },
+    {
+      "id": "E4", "name": "최상",
+      "signals": ["설계·정책 판단", "보안·인증·권한", "금액·재고·정산 정합성", "DB 스키마", "되돌리기 어려운 변경", "원인 불명 장애"],
+      "examples": ["인증 흐름", "정산 로직", "migration 설계"],
+      "effort": { "claude": "xhigh", "codex": "xhigh" }
+    }
+  ],
+  "escalation": { "maxPerDispatch": 1 }
+}

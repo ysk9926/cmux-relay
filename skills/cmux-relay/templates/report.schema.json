@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "relay report",
+  "type": "object",
+  "required": ["taskId", "dispatchId", "status", "summary"],
+  "properties": {
+    "taskId": { "type": "string" },
+    "dispatchId": { "type": "string", "description": "이번 지시의 dispatchId. 파일명 report-<dispatchId>.json 과 같아야 한다" },
+    "status": { "enum": ["done", "needs_input", "failed"] },
+    "summary": { "type": "string" },
+    "changes": { "type": "array", "items": { "type": "object", "required": ["path", "what"], "properties": { "path": { "type": "string" }, "what": { "type": "string" } } } },
+    "verification": { "type": "array", "items": { "type": "object", "required": ["command", "result"], "properties": { "command": { "type": "string" }, "result": { "enum": ["pass", "fail", "not_run"] } } } },
+    "questions": { "type": "array", "items": { "type": "object", "required": ["id", "text"], "properties": { "id": { "type": "string" }, "text": { "type": "string" } } } },
+    "unmeasured": { "type": "array", "items": { "type": "string" } },
+    "next": { "type": "string" }
+  }
+}

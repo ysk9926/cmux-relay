@@ -1,0 +1,46 @@
+---
+name: cmux-relay
+description: cmux 새 탭에 자식 Claude·Codex 세션을 띄워 일을 맡기고, 작업 강도에 맞는 effort 로 실행한 뒤 보고서를 돌려받을 때 사용한다. "새 탭에서 codex 로 돌려줘", "자식 세션에 맡겨줘", "병렬로 띄워서 결과만 받아줘" 같은 요청. 오케스트레이터는 Claude 세션만 맡는다.
+---
+
+# cmux 세션 릴레이
+
+`relay`는 `node ~/.claude/skills/cmux-relay/scripts/relay.mjs` 이다. 모든 명령에 `--help`·`--dry-run` 이 있다.
+
+## 1. 등급 판정 (띄우기 전 매번)
+1. 사용자가 등급(E1~E4)이나 effort 를 말했으면 그 값을 쓴다 → `--effort <레벨>` (`max`·`ultra` 는 이 경로로만).
+2. 아니면 `config/effort-tiers.json` 의 signals 를 보고 **해당하는 신호 중 가장 높은 등급**을 고른다. 애매하면 한 등급 위.
+   금액·재고·정산·권한·DB 스키마를 건드리면 한 줄이라도 E4.
+3. 띄우기 직전 사용자에게 한 줄로 알리고 승인은 기다리지 않는다:
+   `E2(보통) · Claude opus / effort medium 으로 띄웁니다 — 근거: <한 줄>`
+
+## 2. 실행
+1. `templates/brief.md` 를 채워 지시서 파일을 만든다. 사용자가 승인한 실행 범위만 원문으로 넣는다.
+2. `relay spawn --agent claude|codex --task <id> --brief <파일> --tier E2 --tier-reason "<근거>" [--cwd <dir>] [--worktree --preset bypass]`
+   - 코드를 바꾸는 작업은 `--worktree`. 조사·리뷰는 같은 체크아웃.
+3. 출력의 `dispatchId` 로 대기를 **백그라운드 Bash**(run_in_background)로 건다:
+   `relay wait <task> --dispatch <id> --timeout <초>` — 끝나면 알림으로 깨어난다. 폴링하지 않는다.
+
+## 3. 깨어난 뒤 (종료코드)
+| 코드 | 처리 |
+|---|---|
+| 0 | 보고서의 changes·verification 을 **직접 다시 확인**한 뒤 사용자에게 보고 |
+| 3 | 보고서 questions 를 사용자에게 그대로 전달 → 답을 `relay send <task> --message` |
+| 4 | 자동 판정 지시면 `relay escalate <task> --from <id>` 후 새 dispatchId 로 wait. 거부되면 사용자에게 보고 |
+| 5 | 출력 screen 에서 질문을 찾으면 사용자에게 전달. 없으면 `relay send <task> --remind <id>` → wait → 또 5면 `relay escalate` |
+| 6 | 사용자에게 "탭 <이름>에서 권한 확인 대기"를 알린다. **대신 승인하지 않는다.** 승인 뒤 같은 dispatchId 로 다시 wait. 사람이 Esc 로 거부·중단한 뒤에도 6(needs-input)으로 보이므로, 화면에 승인 창이 없으면 `relay send` 로 이어 간다 |
+| 124 | `relay status <task>` 로 진단하고 계속 기다릴지 묻는다. 탭은 닫지 않는다 |
+
+- `applied.status` 가 `match` 가 아니거나 `settingsChanged` 가 비어 있지 않으면 결과와 함께 사용자에게 알린다. 설정은 사용자 확인 없이 되돌리지 않는다.
+- Codex 승급 탭(`observe: rollout`)은 권한 대기를 감지하지 못한다. 시간 초과가 나면 `relay status` 화면을 확인한다.
+- 지시가 도는 동안 자식 탭에 직접 입력하지 않는다. 그 턴의 Stop 도 이번 지시의 Stop 으로 집힌다.
+
+## 4. 금지
+- 자식에게 슬래시 명령(`/effort`, `/model` 등)을 보내지 않는다. 전역 설정을 바꾼다(`relay send` 가 거부함).
+- 실행 중 effort 변경을 시도하지 않는다. 등급을 바꾸려면 새 세션이나 `relay escalate`.
+- 지시서에 비밀값·고객 데이터 원문, DB 변경·migration·seed·배포를 넣지 않는다.
+- 자식이 보고한 값을 그대로 믿지 않는다. 변경과 검증은 직접 다시 확인한다.
+
+## 5. 정리
+사용자가 확인하면 `relay close <task>`. 작업 폴더 `~/.agent-relay/tasks/<task>/` 와 세션 기록은 남는다.
+effort 기록은 `~/.agent-relay/effort-log.jsonl` 에 쌓이며, 기준표 확정(계획 9단계)의 근거가 된다.

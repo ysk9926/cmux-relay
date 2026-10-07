@@ -1,0 +1,5 @@
+# 로컬 전용: 개발 이력·내부 자료 (공개하지 않음)
+internal/
+.superpowers/
+node_modules/
+.DS_Store
