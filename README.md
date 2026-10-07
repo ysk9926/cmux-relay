@@ -1,6 +1,6 @@
 # cmux-relay
 
-English | [한국어](#한국어)
+English | [한국어](#한국어) · [Changelog](CHANGELOG.md)
 
 Claude Code skill that delegates work to child Claude/Codex sessions in new [cmux](https://github.com/manaflow-ai/cmux) tabs — picks effort by task tier (E1–E4), detects completion via per-dispatch report files, verifies the applied model/effort, and escalates once on failure.
 
@@ -104,6 +104,10 @@ Change the fixed models (default Claude `opus`, Codex `gpt-6.1-sol`) and levels 
 - If you type into a child tab while a dispatch is running, that turn's end is also picked up as this dispatch's end.
 - Escalation tabs started with `codex fork` emit no cmux hook events; completion is read from the rollout file and permission waits are not detected.
 - Context transfer (`--context fork|transfer`) and a new-session fallback when Codex fork fails are not implemented yet.
+
+## Updating
+
+Installed copies do not update automatically. Run `npx skills check`, then `npx skills update`. See [CHANGELOG.md](CHANGELOG.md) for what changed.
 
 ## Tests
 
@@ -217,6 +221,10 @@ $R close docfix
 - 지시가 도는 동안 자식 탭에 직접 입력하면 그 턴의 종료도 이번 지시의 종료로 잡힙니다.
 - `codex fork` 로 띄운 승급 탭은 cmux 훅 이벤트가 없어 rollout 기록으로 완료를 판정하며, 권한 대기는 감지하지 못합니다.
 - 대화 맥락 이전(`--context fork|transfer`)과 Codex fork 실패 시 새 세션 예비 경로는 아직 없습니다.
+
+### 업데이트
+
+설치한 사본은 자동으로 바뀌지 않습니다. `npx skills check` 로 확인하고 `npx skills update` 로 받습니다. 변경 내역은 [CHANGELOG.md](CHANGELOG.md) 를 참고하세요.
 
 ### 테스트
 
