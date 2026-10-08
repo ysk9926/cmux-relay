@@ -15,18 +15,18 @@ test('spawn --dry-run: 파일을 만들지 않고 명령만, model·effort 플�
   assert.deepEqual(cmd.slice(0, 7), ['cmux', 'new-split', 'right', '--workspace', ORCH.workspace, '--surface', ORCH.surface]);
   assert.match(cmd[cmd.indexOf('--command') + 1], /^source \S+\/tasks\/docfix\/launch-d1-[0-9a-f]{4}\.zsh$/);
   const command = r.last.launch;
-  assert.match(command, /^claude -n relay-docfix-[0-9a-f]{4} --permission-mode acceptEdits --model opus --effort medium '/);
+  assert.match(command, /^claude -n relay-docfix-[0-9a-f]{4} --permission-mode bypassPermissions --model opus --effort medium '/);
   assert.ok(command.indexOf('dispatchId: d1-') < command.indexOf('--add-dir'));
   assert.deepEqual(r.last.requested, { tier: 'E2', model: 'opus', effort: 'medium', source: 'auto' });
 });
 
-test('spawn 거부: 등급·effort 없음, 근거 없음, bypass 에 worktree 없음, 지시서 없음, --context fork', async () => {
+test('spawn 거부: 등급·effort 없음, 근거 없음, 잘못된 preset, 지시서 없음, --context fork', async () => {
   const ctx = { home: path.join(tmp(), 'relay'), userHome: fakeUserHome(), cmux: fakeCmux() };
   const brief = writeBrief();
   const cases = [
     [['--brief', brief], 'EFFORT_REQUIRED'],
     [['--brief', brief, '--tier', 'E2'], 'REASON_REQUIRED'],
-    [['--brief', brief, '--effort', 'low', '--preset', 'bypass'], 'BYPASS_NEEDS_WORKTREE'],
+    [['--brief', brief, '--effort', 'low', '--preset', 'yolo'], 'PRESET_INVALID'],
     [['--brief', '/nope.md', '--effort', 'low'], 'BRIEF_NOT_FOUND'],
     [['--brief', brief, '--effort', 'low', '--context', 'fork'], 'NOT_IMPLEMENTED'],
     [['--brief', brief, '--effort', 'turbo'], 'LEVEL_NOT_ALLOWED'],
@@ -55,7 +55,7 @@ test('spawn 실행(기본 split): 작업 폴더·지시서·스키마·meta, 오
   assert.equal(d.effort, 'low');
   assert.equal(d.seq, 100);
   assert.deepEqual(d.settingsBefore['~/.codex/config.toml'], { model: 'gpt-6.1-sol', model_reasoning_effort: 'xhigh' });
-  assert.match(d.command, /^codex -s workspace-write -a on-request -m gpt-6\.1-sol -c model_reasoning_effort=low --add-dir /);
+  assert.match(d.command, /^codex --dangerously-bypass-approvals-and-sandbox -m gpt-6\.1-sol -c model_reasoning_effort=low --add-dir /);
   assert.ok(fs.existsSync(path.join(dir, 'brief.md')) && fs.existsSync(path.join(dir, 'report.schema.json')));
   assert.equal(fs.statSync(path.join(dir, 'brief.md')).mode & 0o777, 0o600);
   const split = cmux.calls.find((c) => c[0] === 'createSplit')[1];

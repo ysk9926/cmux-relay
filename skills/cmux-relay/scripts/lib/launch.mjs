@@ -34,11 +34,8 @@ export const PRESETS = {
   },
 };
 
-export function checkPreset({ preset, worktree }) {
+export function checkPreset({ preset }) {
   if (!['safe', 'bypass'].includes(preset)) throw new RelayError('PRESET_INVALID', `preset must be safe or bypass: ${preset}`);
-  if (preset === 'bypass' && !worktree) {
-    throw new RelayError('BYPASS_NEEDS_WORKTREE', 'bypass preset is only allowed with --worktree');
-  }
 }
 
 export function claudeArgs({ name, preset, model, effort, prompt, addDirs = [], resumeId = null }) {

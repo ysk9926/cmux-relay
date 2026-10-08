@@ -23,7 +23,7 @@ export const HELP = `relay spawn — 오케스트레이터 옆 cmux 분할·탭�
                                            tab: ⌘T 처럼 오케스트레이터 workspace 에 새 탭
                                            workspace: 사이드바에 새 workspace (예전 동작)
   --worktree                               git worktree 를 만들어 그 안에서 실행
-  --preset safe|bypass                     권한 프리셋 (기본 safe, bypass 는 --worktree 필요)
+  --preset safe|bypass                     권한 프리셋 (기본 bypass)
   --context brief                          맥락 이전 (fork·transfer 는 6단계)
   --dry-run                                실행할 명령만 출력`;
 
@@ -34,7 +34,7 @@ export async function run(argv, ctx) {
       agent: { type: 'string' }, 'agent-rule': { type: 'string' }, task: { type: 'string' }, brief: { type: 'string' },
       tier: { type: 'string' }, 'tier-reason': { type: 'string' }, effort: { type: 'string' },
       cwd: { type: 'string' }, worktree: { type: 'boolean', default: false }, placement: { type: 'string', default: 'split' },
-      preset: { type: 'string', default: 'safe' }, context: { type: 'string', default: 'brief' },
+      preset: { type: 'string', default: 'bypass' }, context: { type: 'string', default: 'brief' },
       'dry-run': { type: 'boolean', default: false }, help: { type: 'boolean', default: false },
     },
   });
@@ -44,7 +44,7 @@ export async function run(argv, ctx) {
   }
   validateTaskId(v.task);
   if (v.context !== 'brief') throw new RelayError('NOT_IMPLEMENTED', '--context fork|transfer is planned for phase 6');
-  checkPreset({ preset: v.preset, worktree: v.worktree });
+  checkPreset({ preset: v.preset });
   checkPlacement(v.placement);
   if (v.placement !== 'workspace') requireCaller(ctx, v.placement); // worktree 를 만들기 전에 거부
   const r = resolveEffort(readTiers(ctx), { agent: v.agent, tier: v.tier, tierReason: v['tier-reason'], effort: v.effort });

@@ -33,7 +33,7 @@ description: cmux 에서 오케스트레이터 옆 분할(⌘D)·새 탭에 자�
 
 ## 2. 실행
 1. `templates/brief.md` 를 채워 지시서 파일을 만든다. 사용자가 승인한 실행 범위만 원문으로 넣는다.
-2. `relay spawn --agent claude|codex --agent-rule <규칙> --task <id> --brief <파일> --tier E2 --tier-reason "<근거>" [--cwd <dir>] [--worktree --preset bypass]`
+2. `relay spawn --agent claude|codex --agent-rule <규칙> --task <id> --brief <파일> --tier E2 --tier-reason "<근거>" [--cwd <dir>] [--worktree] [--preset safe]`
    - 코드를 바꾸는 작업은 `--worktree`. 조사·리뷰는 같은 체크아웃.
    - 자식은 오케스트레이터 workspace 안에 열린다. 기본 `--placement split`(⌘D: 오른쪽, 다음 자식은 그 아래로 쌓임).
      사용자가 탭을 원하면 `tab`(⌘T), 사이드바 workspace 를 원하면 `workspace`. `NOT_IN_CMUX` 가 나오면 `workspace` 로 다시 띄운다.

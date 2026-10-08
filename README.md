@@ -105,7 +105,7 @@ On 0, `relay wait` closes every open tab of the task, including a failed tab lef
 - Never approves permission prompts on your behalf. Exit 6 is handed to a human.
 - Never sends slash commands to children (`relay send` rejects messages starting with `/`). Claude's `/effort` saves a global default, not just the session value.
 - Effort is set only through launch flags (session-scoped). Global settings are read for a fixed set of keys and never written.
-- Default permission preset is `safe` (Claude `acceptEdits`, Codex `-s workspace-write -a on-request`). `bypass` is allowed only together with `--worktree`.
+- Default permission preset is `bypass` (Claude `--permission-mode bypassPermissions`, Codex `--dangerously-bypass-approvals-and-sandbox`), with or without `--worktree`. Pass `--preset safe` for Claude `acceptEdits` / Codex `-s workspace-write -a on-request`.
 - The effort log stores metadata only, never instructions or report bodies.
 
 ## Observed cmux/CLI behavior
@@ -240,7 +240,7 @@ $R close docfix                                      # 3·4·5·6·124 뒤 남�
 - 권한 요청을 대신 승인하지 않습니다. 6 이 나오면 사람에게 넘깁니다.
 - 자식에게 슬래시 명령을 보내지 않습니다(`relay send` 가 `/` 로 시작하는 메시지를 거부). Claude `/effort` 는 세션뿐 아니라 전역 기본값을 저장합니다.
 - effort 는 띄울 때의 플래그로만 정합니다(세션 한정). 전역 설정은 정해진 키만 읽고 쓰지 않습니다.
-- 권한 프리셋 기본값은 `safe`(Claude `acceptEdits`, Codex `-s workspace-write -a on-request`). `bypass` 는 `--worktree` 와 함께만 허용합니다.
+- 권한 프리셋 기본값은 `bypass`(Claude `--permission-mode bypassPermissions`, Codex `--dangerously-bypass-approvals-and-sandbox`)이며 `--worktree` 없이도 씁니다. `--preset safe` 를 주면 Claude `acceptEdits`, Codex `-s workspace-write -a on-request` 로 띄웁니다.
 - effort-log 에는 메타데이터만 남기고 지시·보고 본문은 남기지 않습니다.
 
 ### 실측으로 확인한 cmux·CLI 동작

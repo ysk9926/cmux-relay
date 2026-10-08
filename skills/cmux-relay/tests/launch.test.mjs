@@ -26,10 +26,10 @@ test('Codex: -m 과 -c model_reasoning_effort, 프롬프트는 맨 뒤, fork 는
   assert.deepEqual(codexArgs({ ...base, preset: 'bypass', model: 'gpt-6.1-sol' }).slice(1, 2), ['--dangerously-bypass-approvals-and-sandbox']);
 });
 
-test('bypass 프리셋은 worktree 없이는 거부', () => {
-  assert.throws(() => checkPreset({ preset: 'bypass', worktree: false }), { code: 'BYPASS_NEEDS_WORKTREE' });
-  assert.doesNotThrow(() => checkPreset({ preset: 'bypass', worktree: true }));
-  assert.throws(() => checkPreset({ preset: 'yolo', worktree: true }), { code: 'PRESET_INVALID' });
+test('프리셋은 safe·bypass 만, bypass 는 worktree 없이도 허용', () => {
+  assert.doesNotThrow(() => checkPreset({ preset: 'bypass' }));
+  assert.doesNotThrow(() => checkPreset({ preset: 'safe' }));
+  assert.throws(() => checkPreset({ preset: 'yolo' }), { code: 'PRESET_INVALID' });
 });
 
 test('PoC: 탭에 입력하는 명령은 ASCII 인 source 한 줄, 비 ASCII 경로는 거부', () => {

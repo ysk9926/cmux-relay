@@ -81,7 +81,7 @@ test('escalate Codex: codex fork <세션> 이 맨 앞, fork 세션은 rollout �
   const r = await runRelay(['escalate', 't', '--from', d1], { ...ctx, sleep });
   assert.equal(r.code, 0);
   const meta = readMeta(ctx.home, 't');
-  assert.match(fs.readFileSync(meta.dispatches[1].launchFile, 'utf8'), /^codex fork S1 -s workspace-write -a on-request -m gpt-6\.1-sol -c model_reasoning_effort=medium /m);
+  assert.match(fs.readFileSync(meta.dispatches[1].launchFile, 'utf8'), /^codex fork S1 --dangerously-bypass-approvals-and-sandbox -m gpt-6\.1-sol -c model_reasoning_effort=medium /m);
   const tab = meta.tabs[1];
   assert.deepEqual([tab.sessionId, tab.observe], ['F1', 'rollout']);
 });

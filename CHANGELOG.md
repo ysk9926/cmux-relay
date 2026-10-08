@@ -4,6 +4,11 @@ English | [한국어](#한국어)
 
 Installed copies do not update automatically. Run `npx skills check` to see if an update is available and `npx skills update` to apply it.
 
+## [Unreleased]
+
+### Changed
+- `relay spawn` now defaults to `--preset bypass` (Claude `--permission-mode bypassPermissions`, Codex `--dangerously-bypass-approvals-and-sandbox`), and `bypass` no longer requires `--worktree`. `relay escalate` reuses the task's preset, so escalations of new tasks run in bypass too. Pass `--preset safe` for the old behavior.
+
 ## [0.4.0] - 2026-10-07
 
 ### Added
@@ -79,6 +84,11 @@ See README "Known limitations" for what is not handled yet.
 ## 한국어
 
 설치한 사본은 자동으로 바뀌지 않습니다. `npx skills check` 로 업데이트가 있는지 확인하고 `npx skills update` 로 받습니다.
+
+## [Unreleased]
+
+### 변경
+- `relay spawn` 의 기본 프리셋이 `bypass`(Claude `--permission-mode bypassPermissions`, Codex `--dangerously-bypass-approvals-and-sandbox`)로 바뀌었고, `bypass` 에 `--worktree` 가 더 이상 필요하지 않습니다. `relay escalate` 는 작업의 프리셋을 그대로 쓰므로 새 작업의 승급도 bypass 로 뜹니다. 예전 동작은 `--preset safe` 로 씁니다.
 
 ## [0.4.0] - 2026-10-07
 
