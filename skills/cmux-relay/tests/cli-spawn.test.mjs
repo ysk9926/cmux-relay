@@ -46,7 +46,9 @@ test('spawn 실행(기본 split): 작업 폴더·지시서·스키마·meta, 오
   assert.deepEqual([r.last.placement, r.last.ref, r.last.surface], ['split', 'surface:11', SURFACES[0]]);
   const dir = path.join(home, 'tasks/probe');
   const meta = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8'));
-  const { openedAt, ...tab } = meta.tabs[0];
+  const { openedAt, dispatchId, agent, ...tab } = meta.tabs[0];
+  assert.equal(dispatchId, meta.dispatches[0].dispatchId);
+  assert.equal(agent, meta.agent);
   assert.deepEqual(tab, { name: meta.dispatches[0].tab, ref: 'surface:11', uuid: ORCH.workspace, surface: SURFACES[0], placement: 'split', parentSurface: ORCH.surface, sessionId: 'S1', transcriptPath: null, observe: 'hook' });
   assert.ok(Date.parse(openedAt));
   assert.deepEqual([meta.placement, meta.parent], ['split', ORCH]);
@@ -115,7 +117,9 @@ test('spawn --placement workspace: 예전처럼 사이드바에 새 workspace, -
   const r = await runRelay(['spawn', '--agent', 'codex', '--task', 'ws', '--brief', writeBrief(), '--effort', 'low', '--cwd', '/w', '--placement', 'workspace'], { home, userHome: fakeUserHome(), cmux, env: {} });
   assert.equal(r.code, 0);
   const meta = JSON.parse(fs.readFileSync(path.join(home, 'tasks/ws/meta.json'), 'utf8'));
-  const { openedAt, ...tab } = meta.tabs[0];
+  const { openedAt, dispatchId, agent, ...tab } = meta.tabs[0];
+  assert.equal(dispatchId, meta.dispatches[0].dispatchId);
+  assert.equal(agent, meta.agent);
   assert.deepEqual(tab, { name: meta.dispatches[0].tab, ref: 'workspace:21', uuid: UUIDS[0], placement: 'workspace', sessionId: 'S1', transcriptPath: null, observe: 'hook' });
   assert.equal(meta.parent, null);
   const create = cmux.calls.find((c) => c[0] === 'createWorkspace')[1];
@@ -150,7 +154,7 @@ test('spawn --worktree: git worktree add 후 그 폴더에서 실행', async () 
   const cmux = fakeCmux();
   const r = await runRelay(['spawn', '--agent', 'claude', '--task', 'fix', '--brief', writeBrief(), '--effort', 'high', '--cwd', '/repo', '--worktree', '--preset', 'bypass'], { home, userHome: fakeUserHome(), cmux, runGit: (a) => gits.push(a) });
   assert.equal(r.code, 0);
-  assert.deepEqual(gits[0], ['-C', '/repo', 'worktree', 'add', '-b', 'relay/fix', path.join(home, 'worktrees/fix')]);
+  assert.deepEqual(gits.find(a => a.includes('add')), ['-C', '/repo', 'worktree', 'add', '-b', 'relay/fix', path.join(home, 'worktrees/fix')]);
   const meta = JSON.parse(fs.readFileSync(path.join(home, 'tasks/fix/meta.json'), 'utf8'));
   assert.equal(meta.cwd, path.join(home, 'worktrees/fix'));
   const launch = fs.readFileSync(meta.dispatches[0].launchFile, 'utf8');

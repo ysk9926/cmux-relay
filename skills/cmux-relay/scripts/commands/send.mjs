@@ -1,3 +1,6 @@
+import { taskOperation } from '../lib/task-lock.mjs';
+import { startHeadless, readHeadless } from '../lib/headless.mjs';
+import { resolveHost } from '../lib/host.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
@@ -10,6 +13,7 @@ export const HELP = `relay send — 같은 세션에 후속 지시나 보고서 
   relay send <task> --message "<한 줄>"     후속 지시 (/ 로 시작하면 거부)
   relay send <task> --file <path>          긴 지시: dispatch/<id>.md 로 복사하고 경로만 보냄
   relay send <task> --remind <dispatchId>  종료코드 5 인 지시에 보고서 재요청
+  --host claude|codex                      현재 지시를 내리는 호스트
   --dry-run                                보낼 내용만 출력
 effort 는 세션 값을 유지한다. 실행 중 effort 변경은 하지 않는다.`;
 
@@ -17,7 +21,7 @@ export async function run(argv, ctx) {
   const { values: v, positionals } = parseArgs({
     args: argv,
     allowPositionals: true,
-    options: {
+    options: { host: { type: 'string' },
       message: { type: 'string' }, file: { type: 'string' }, remind: { type: 'string' },
       'dry-run': { type: 'boolean', default: false }, help: { type: 'boolean', default: false },
     },
@@ -26,11 +30,14 @@ export async function run(argv, ctx) {
     ctx.print(HELP);
     return 0;
   }
+  const host = resolveHost(v.host, ctx.env ?? {});
   const taskId = requirePositional(positionals, 'task');
+  const perform = async () => {
   if ([v.message, v.file, v.remind].filter((x) => x !== undefined).length !== 1) {
     throw new RelayError('SEND_MODE', 'pass exactly one of --message, --file, --remind');
   }
   const meta = readMeta(ctx.home, taskId);
+  if (meta.tabs.some(t => !t.closed && t.observe === 'headless' && readHeadless(taskDir(ctx.home, taskId), t.dispatchId ?? t.name)?.status === 'running')) throw new RelayError('TASK_RUNNING', 'a headless dispatch is still running for this task');
   if (meta.closedAt) throw new RelayError('TASK_CLOSED', `tabs of ${taskId} were closed at ${meta.closedAt}; spawn a new task (use wait --keep-open to keep the session for follow-ups)`);
   const dir = taskDir(ctx.home, taskId);
   const dry = v['dry-run'];
@@ -60,27 +67,40 @@ export async function run(argv, ctx) {
     text = remindMessage({ taskDir: dir, dispatchId, forDispatchId: base.dispatchId });
   }
 
-  const tab = findTab(meta, base.tab);
+  text += ` 이번 보고서 stage는 ${base.stage ?? meta.stage ?? 'work'}이다. 실행 증거와 승인 없이 verified를 쓰지 마라.`;
+  let tab = findTab(meta, base.tab);
+  const headless = tab.observe === 'headless';
+  const previous = headless ? readHeadless(dir, base.dispatchId) : null;
+  if (headless && previous?.status === 'running') throw new RelayError('TASK_RUNNING', 'wait for the current headless dispatch before send');
   // Claude·Codex 모두 탭 입력창에 넣는다. codex queue 는 cmux shim 의 설정 덮어쓰기로 거부되고,
   // 중단된 턴 뒤에는 전달되지 않는다(PoC 실측). cmux send 는 UTF-8 이 그대로 들어간다.
-  const plan = { via: 'cmux', ref: tab.ref, text };
+  const plan = { via: headless ? 'headless' : 'cmux', ref: tab.ref, text };
   if (dry) {
-    ctx.out({ dryRun: true, dispatchId, kind, ...plan });
+    ctx.out({ dryRun: true, host, dispatchId, kind, ...plan });
     return 0;
   }
   if (dest) writeFile600(dest, fileContent);
 
   const settingsBefore = snapshotSettings(ctx);
-  const seq = ctx.cmux.latestSeq();
+  const seq = headless ? null : ctx.cmux.latestSeq();
   const startedAt = ctx.now().toISOString();
-  ctx.cmux.send(tab, text);
+  if (headless) {
+    tab = (ctx.startHeadless ?? startHeadless)(ctx, { taskId, dispatchId, dir, home: ctx.home, cwd: meta.cwd, preset: meta.preset,
+      candidates: previous?.agent ? [{ agent: previous.agent, model: previous.model ?? base.model, effort: previous.effort ?? base.effort }, ...(base.candidates ?? []).filter(c => c.agent !== previous.agent)] : base.candidates ?? [{ agent: meta.agent, model: base.model, effort: base.effort }], pinned: base.pinned ?? true,
+      prompt: `작업 지시서 ${path.join(dir, 'brief.md')} 와 이전 보고서를 읽고 이어서 수행하라. ${text}`,
+      resumeId: previous?.sessionId, resumeAgent: previous?.agent, host });
+    tab = { ...tab, dispatchId, agent: previous?.agent ?? meta.agent };
+    meta.tabs.push(tab);
+  } else ctx.cmux.send(tab, text);
   meta.dispatches.push(dispatchRecord({
-    dispatchId, kind, tab: tab.name, startedAt, seq,
+    dispatchId, kind, host, backend: headless ? 'headless' : 'cmux', stage: base.stage ?? meta.stage ?? 'work', agent: previous?.agent ?? base.agent ?? meta.agent, candidates: base.candidates, pinned: base.pinned, tab: tab.name, startedAt, seq,
     tier: base.tier, model: base.model, effort: base.effort, source: base.source, reason: base.reason, agentRule: base.agentRule ?? null,
-    command: null, settingsBefore, remindFor: kind === 'remind' ? base.dispatchId : null,
+    prompt: text, command: null, settingsBefore, remindFor: kind === 'remind' ? base.dispatchId : null,
   }));
   if (kind === 'remind') base.remindedBy = dispatchId;
   writeMeta(ctx.home, taskId, meta);
-  ctx.out({ dispatchId, kind, tab: tab.name });
+  ctx.out({ host, dispatchId, kind, tab: tab.name });
   return 0;
+  };
+  return v['dry-run'] ? perform() : taskOperation(ctx, taskId, perform);
 }

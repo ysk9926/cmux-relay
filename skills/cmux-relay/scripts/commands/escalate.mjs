@@ -1,3 +1,6 @@
+import { taskOperation } from '../lib/task-lock.mjs';
+import { readHeadless, startHeadless } from '../lib/headless.mjs';
+import { resolveHost } from '../lib/host.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
@@ -12,7 +15,7 @@ import { RelayError } from '../lib/errors.mjs';
 import { readTiers, snapshotSettings, poll, findDispatch, findTab, dispatchRecord, pickRequested, requirePositional, createChild, locateChild, childPlan, requireCaller } from './common.mjs';
 
 export const HELP = `relay escalate — 자동 판정 지시가 실패하면 한 등급 위 effort 로 1회 fork 재시도
-  relay escalate <task> --from <dispatchId> [--dry-run]
+  relay escalate <task> --from <dispatchId> [--host claude|codex] [--dry-run]
 조건: source=auto, 종료코드 4 또는 (5 이고 재요청도 5), 다음 등급 있음, 아직 승급 안 함.
 Claude 는 --resume <세션> --fork-session, Codex 는 codex fork <세션>(완료는 rollout 으로 판정).`;
 
@@ -20,16 +23,20 @@ export async function run(argv, ctx) {
   const { values: v, positionals } = parseArgs({
     args: argv,
     allowPositionals: true,
-    options: { from: { type: 'string' }, 'dry-run': { type: 'boolean', default: false }, help: { type: 'boolean', default: false } },
+    options: { host: { type: 'string' }, from: { type: 'string' }, 'dry-run': { type: 'boolean', default: false }, help: { type: 'boolean', default: false } },
   });
   if (v.help) {
     ctx.print(HELP);
     return 0;
   }
+  const host = resolveHost(v.host, ctx.env ?? {});
   const taskId = requirePositional(positionals, 'task');
+  const perform = async () => {
   if (!v.from) throw new RelayError('USAGE', 'missing --from <dispatchId>');
   const tiers = readTiers(ctx);
   const meta = readMeta(ctx.home, taskId);
+  if (meta.tabs.some(t => !t.closed && t.observe === 'headless' && readHeadless(taskDir(ctx.home, taskId), t.dispatchId ?? t.name)?.status === 'running')) throw new RelayError('TASK_RUNNING', 'a headless dispatch is still running for this task');
+  if (meta.closedAt) throw new RelayError('TASK_CLOSED', 'closed tasks cannot be escalated; spawn a new task');
   const from = findDispatch(meta, v.from);
   const fromTab = findTab(meta, from.tab);
   const remind = from.remindedBy ? findDispatch(meta, from.remindedBy) : null;
@@ -41,7 +48,7 @@ export async function run(argv, ctx) {
     remindExitCode: remind?.exitCode ?? null,
   });
   if (!decision.escalate) throw new RelayError('ESCALATION_REFUSED', decision.reason);
-  if (!fromTab.sessionId) throw new RelayError('SESSION_UNKNOWN', `no session id for tab ${fromTab.name}`);
+  if (fromTab.observe !== 'headless' && !fromTab.sessionId) throw new RelayError('SESSION_UNKNOWN', `no session id for tab ${fromTab.name}`);
 
   const r = resolveEffort(tiers, { agent: meta.agent, tier: decision.nextTier, tierReason: `escalated from ${from.dispatchId} (${decision.reason})` });
   const dir = taskDir(ctx.home, taskId);
@@ -50,6 +57,21 @@ export async function run(argv, ctx) {
   const rp = path.join(dir, reportFileName(from.dispatchId));
   const prev = fs.existsSync(rp) ? parseReport(fs.readFileSync(rp, 'utf8'), from.dispatchId) : null;
   const prompt = escalateMessage({ taskDir: dir, dispatchId, from: { dispatchId: from.dispatchId, tier: from.tier, effort: from.effort, summary: prev?.ok ? prev.report.summary : '' } });
+  if (fromTab.observe === 'headless') {
+    const previous = readHeadless(dir, from.dispatchId);
+    if (previous?.status === 'running') throw new RelayError('TASK_RUNNING', 'cannot escalate a running dispatch');
+    if (v['dry-run']) { ctx.out({ dryRun: true, host, backend: 'headless', decision, requested: pickRequested(r), dispatchId }); return 0; }
+    const tab = { ...(ctx.startHeadless ?? startHeadless)(ctx, { taskId, dispatchId, dir, home: ctx.home, cwd: meta.cwd, preset: meta.preset,
+      candidates: [{ ...r }], pinned: true, prompt: `지시서 ${path.join(dir, 'brief.md')} 를 읽어라. ${prompt}`, resumeId: previous?.sessionId, resumeAgent: previous?.agent, host }), dispatchId, agent: meta.agent };
+    meta.tabs.push(tab);
+    meta.dispatches.push(dispatchRecord({ dispatchId, kind: 'escalate', host, agent: meta.agent, backend: 'headless', stage: from.stage ?? 'work',
+      tab: tab.name, startedAt: ctx.now().toISOString(), seq: null, ...pickRequested(r), reason: r.reason,
+      prompt, agentRule: from.agentRule ?? null, pinned: true, candidates: [{ ...r }], settingsBefore: snapshotSettings(ctx), escalatedFrom: from.dispatchId }));
+    from.escalatedTo = dispatchId;
+    writeMeta(ctx.home, taskId, meta);
+    ctx.out({ dispatchId, host, backend: 'headless', decision, requested: pickRequested(r), ref: tab.ref });
+    return 0;
+  }
   const args = meta.agent === 'claude'
     ? claudeArgs({ name: tabName, preset: meta.preset, model: r.model, effort: r.effort, prompt, addDirs: [dir], resumeId: fromTab.sessionId })
     : codexArgs({ preset: meta.preset, model: r.model, effort: r.effort, prompt, addDirs: [dir], forkFrom: fromTab.sessionId });
@@ -62,14 +84,20 @@ export async function run(argv, ctx) {
   if (child.placement !== 'workspace') requireCaller(ctx, child.placement); // launch 파일을 쓰기 전에 거부
 
   if (v['dry-run']) {
-    ctx.out({ dryRun: true, dispatchId, decision, requested: pickRequested(r), launch: command, plan: [childPlan(ctx, child)] });
+    ctx.out({ dryRun: true, host, dispatchId, decision, requested: pickRequested(r), launch: command, plan: [childPlan(ctx, child)] });
     return 0;
   }
   writeFile600(launchFile, launchScript({ cwd: meta.cwd, env, command }));
   const settingsBefore = snapshotSettings(ctx);
   const seq = ctx.cmux.latestSeq();
   const startedAt = ctx.now().toISOString();
-  const opened = await locateChild(ctx, createChild(ctx, child));
+  const created = createChild(ctx, child);
+  const tabIndex = meta.tabs.length;
+  meta.tabs.push({ ...created, observe: meta.agent === 'claude' ? 'hook' : 'rollout', sessionId: null });
+  meta.dispatches.push(dispatchRecord({ dispatchId, kind: 'escalate', host, tab: tabName, startedAt, seq, ...pickRequested(r), prompt, reason: r.reason, agentRule: from.agentRule ?? null, command, launchFile, settingsBefore, escalatedFrom: from.dispatchId }));
+  from.escalatedTo = dispatchId;
+  writeMeta(ctx.home, taskId, meta);
+  const opened = await locateChild(ctx, created);
 
   let tab;
   if (meta.agent === 'claude') {
@@ -84,10 +112,10 @@ export async function run(argv, ctx) {
     });
     tab = { ...opened, sessionId: f?.id ?? null, transcriptPath: null, observe: 'rollout', warnings: f ? f.warnings : ['fork-not-found'] };
   }
-  meta.tabs.push(tab);
-  meta.dispatches.push(dispatchRecord({ dispatchId, kind: 'escalate', tab: tabName, startedAt, seq, ...pickRequested(r), reason: r.reason, agentRule: from.agentRule ?? null, command, launchFile, settingsBefore, escalatedFrom: from.dispatchId }));
-  from.escalatedTo = dispatchId;
+  meta.tabs[tabIndex] = tab;
   writeMeta(ctx.home, taskId, meta);
-  ctx.out({ dispatchId, decision, requested: pickRequested(r), placement: child.placement, ref: tab.ref, sessionId: tab.sessionId, observe: tab.observe, warnings: tab.warnings ?? [] });
+  ctx.out({ host, dispatchId, decision, requested: pickRequested(r), placement: child.placement, ref: tab.ref, sessionId: tab.sessionId, observe: tab.observe, warnings: tab.warnings ?? [] });
   return 0;
+  };
+  return v['dry-run'] ? perform() : taskOperation(ctx, taskId, perform);
 }

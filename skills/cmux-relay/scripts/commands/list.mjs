@@ -15,7 +15,7 @@ export async function run(argv, ctx) {
   const tasks = listTasks(ctx.home).map((id) => {
     const m = readMeta(ctx.home, id);
     const d = m.dispatches[m.dispatches.length - 1];
-    return { taskId: id, agent: m.agent, placement: m.placement ?? 'workspace', parent: m.parent ?? null, tabs: m.tabs.length, last: d ? { dispatchId: d.dispatchId, kind: d.kind, exitCode: d.exitCode } : null, closedAt: m.closedAt ?? null };
+    return { taskId: id, host: m.host ?? null, agent: m.agent, backend: m.backend ?? 'cmux', owns: m.owns ?? [], placement: m.placement ?? 'workspace', parent: m.parent ?? null, tabs: m.tabs.length, last: d ? { dispatchId: d.dispatchId, host: d.host ?? null, kind: d.kind, exitCode: d.exitCode } : null, closedAt: m.closedAt ?? null };
   });
   ctx.out({ tasks });
   return 0;

@@ -21,6 +21,11 @@ export function createTask(home, taskId) {
   validateTaskId(taskId);
   const dir = taskDir(home, taskId);
   if (fs.existsSync(dir)) throw new RelayError('TASK_EXISTS', `task already exists: ${taskId}`);
+  fs.mkdirSync(path.join(home, 'tasks'), { recursive: true, mode: 0o700 });
+  try { fs.mkdirSync(dir, { mode: 0o700 }); } catch (error) {
+    if (error.code === 'EEXIST') throw new RelayError('TASK_EXISTS', `task already exists: ${taskId}`);
+    throw error;
+  }
   for (const d of [home, path.join(home, 'tasks'), dir, path.join(dir, 'dispatch'), path.join(dir, 'answers')]) {
     fs.mkdirSync(d, { recursive: true, mode: 0o700 });
     fs.chmodSync(d, 0o700);

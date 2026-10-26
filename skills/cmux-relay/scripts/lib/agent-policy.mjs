@@ -1,3 +1,4 @@
+import { checkHost } from './host.mjs';
 import { RelayError } from './errors.mjs';
 
 const AGENT_VALUES = ['claude', 'codex', 'any', 'other', 'both'];
@@ -22,12 +23,17 @@ export function loadAgentPolicy(text) {
   return p;
 }
 
-export function checkAgentRule(policy, { rule, agent }) {
+export function checkAgentRule(policy, { rule, agent, host, previousAgent }) {
   if (rule === undefined || rule === null) return null;
   const found = policy.rules.find((r) => r.id === rule);
   if (!found) throw new RelayError('UNKNOWN_AGENT_RULE', `unknown agent rule ${rule}`);
   if ((found.agent === 'claude' || found.agent === 'codex') && found.agent !== agent) {
     throw new RelayError('AGENT_RULE_MISMATCH', `rule ${rule} uses ${found.agent}, not ${agent}`);
+  }
+  if (found.agent === 'other') {
+    const reference = previousAgent !== undefined ? checkHost(previousAgent) : host;
+    if (!reference) throw new RelayError('HOST_REQUIRED', `rule ${rule} needs --previous-agent or --host (or a detected host)`);
+    if (agent === reference) throw new RelayError('AGENT_RULE_MISMATCH', `rule ${rule} needs the opposite of ${reference}`);
   }
   return found.id;
 }

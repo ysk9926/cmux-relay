@@ -1,8 +1,16 @@
 # Changelog
 
-English | [한국어](#한국어)
+## 2026-10-26 — host-independent subscription CLI harness
 
-Installed copies do not update automatically. Run `npx skills check` to see if an update is available and `npx skills update` to apply it.
+- Support Claude/Codex hosts with explicit host detection and per-dispatch handoff records.
+- Unify runtime configuration in JSON-syntax `routing.yaml`: per-kind/per-tier candidate chains, pins and configurable quota cooldown from positive usage-limit history.
+- Add detached official CLI headless adapters with session resume, bounded quota-only fallback, private attempt logs, guarded process-group termination and Unicode paths.
+- Preserve cmux execution and add quota fallback with archived attempt reports and recoverable launch metadata.
+- Add atomic file ownership reservations across worktrees and overlapping directories; preserve cwd when starting worktrees from subdirectories.
+- Add report stage/confidence validation and relay-owned approved execution receipts for verified reports.
+- Add persistent plan/work/opposite-provider review/verify workflows, approval gating, host handoff, dry-run and safe dispatch resume.
+- Extend status/list/effort logs with backend, host, stage, model, quota and attempt evidence. Preserve unknown tokens/cost as null.
+- Retain legacy records/config snapshots; runtime reads only routing.yaml. Actual provider login and live cmux validation remain environment checks.
 
 ## [Unreleased]
 

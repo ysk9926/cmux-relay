@@ -1,7 +1,9 @@
+import { taskOperation } from '../lib/task-lock.mjs';
+import { readHeadless, stopHeadless } from '../lib/headless.mjs';
+import { releaseOwnership } from '../lib/ownership.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
-import { loadTiers } from '../lib/effort.mjs';
-import { loadAgentPolicy } from '../lib/agent-policy.mjs';
+import { readRouting } from '../lib/routing.mjs';
 import { extractClaudeSettings, extractCodexConfig } from '../lib/settings-guard.mjs';
 import { RelayError } from '../lib/errors.mjs';
 import { callerOf } from '../lib/launch.mjs';
@@ -11,11 +13,11 @@ export const CLAUDE_SETTINGS = '~/.claude/settings.json';
 export const CODEX_CONFIG = '~/.codex/config.toml';
 
 export function readAgentPolicy(ctx) {
-  return loadAgentPolicy(fs.readFileSync(path.join(ctx.skillDir, 'config', 'agent-policy.json'), 'utf8'));
+  return readRouting(ctx.skillDir).agentPolicy;
 }
 
 export function readTiers(ctx) {
-  return loadTiers(fs.readFileSync(path.join(ctx.skillDir, 'config', 'effort-tiers.json'), 'utf8'));
+  return readRouting(ctx.skillDir);
 }
 
 function readIfExists(p) {
@@ -156,14 +158,24 @@ export function childPlan(ctx, { placement, name, cwd, env, command }) {
 }
 
 // 작업의 열린 탭을 모두 닫는다. 작업 폴더·세션 기록·worktree 는 남긴다. 이미 닫은 탭은 건너뛴다.
-export function closeTabs(ctx, taskId) {
+export async function closeTabs(ctx, taskId, forDispatch = null) {
+  return taskOperation(ctx, taskId, async () => {
   const meta = readMeta(ctx.home, taskId);
+  if (forDispatch && meta.dispatches.at(-1)?.dispatchId !== forDispatch) return { closed: [], failed: [], skipped: 'newer-dispatch' };
   const closed = [];
   const failed = [];
   for (const tab of meta.tabs) {
     if (tab.closed) continue;
     try {
-      ctx.cmux.close(tab);
+      if (tab.observe === 'headless') {
+        const dir = path.join(ctx.home, 'tasks', taskId);
+        const id = tab.dispatchId ?? tab.name;
+        const stopped = stopHeadless(dir, id);
+        if (stopped.reason === 'identity-mismatch') throw new Error('runner identity mismatch; refusing to close');
+        const deadline = Date.now() + 5000;
+        while (readHeadless(dir, id)?.status === 'running' && Date.now() < deadline) await new Promise(r => setTimeout(r, 25));
+        if (readHeadless(dir, id)?.status === 'running') throw new Error('runner stop not confirmed; ownership retained');
+      } else ctx.cmux.close(tab);
       tab.closed = true;
       closed.push(tab.ref);
     } catch (e) {
@@ -171,7 +183,11 @@ export function closeTabs(ctx, taskId) {
     }
   }
   // 하나라도 못 닫았으면 열린 작업으로 둔다(send 가 막히지 않고, split 형제로도 계속 쓴다)
-  if (meta.tabs.every((t) => t.closed)) meta.closedAt ??= ctx.now().toISOString();
+  if (meta.tabs.every((t) => t.closed)) {
+    meta.closedAt ??= ctx.now().toISOString();
+    releaseOwnership(ctx.home, taskId);
+  }
   writeMeta(ctx.home, taskId, meta);
   return { closed, failed };
+  });
 }

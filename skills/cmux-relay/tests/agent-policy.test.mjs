@@ -24,7 +24,7 @@ test('규칙과 에이전트가 맞지 않으면 거부, 고정 에이전트가 
   assert.equal(checkAgentRule(policy, { rule: 'complex-logic', agent: 'codex' }), 'complex-logic');
   assert.throws(() => checkAgentRule(policy, { rule: 'complex-logic', agent: 'claude' }), { code: 'AGENT_RULE_MISMATCH' });
   assert.throws(() => checkAgentRule(policy, { rule: 'default', agent: 'codex' }), { code: 'AGENT_RULE_MISMATCH' });
-  for (const rule of ['user', 'cross-check', 'parallel', 'quota']) {
+  for (const rule of ['user', 'parallel']) {
     assert.equal(checkAgentRule(policy, { rule, agent: 'claude' }), rule);
     assert.equal(checkAgentRule(policy, { rule, agent: 'codex' }), rule);
   }

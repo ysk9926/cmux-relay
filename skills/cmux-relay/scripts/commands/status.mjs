@@ -1,3 +1,4 @@
+import { readHeadless } from '../lib/headless.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
@@ -9,7 +10,7 @@ export const HELP = `relay status — 탭 상태·지시 이력·보고서 유�
   relay status <task> [--json] [--no-screen]   (읽기 전용, --dry-run 은 무시)`;
 
 function format(s) {
-  const lines = [`task ${s.taskId} · ${s.agent} · ${s.cwd}`];
+  const lines = [`task ${s.taskId} · ${s.agent} · ${s.cwd} · host=${s.host ?? "unknown"}`];
   for (const t of s.tabs) lines.push(`  tab ${t.name} ${t.ref} ${t.placement} observe=${t.observe} lifecycle=${t.lifecycle ?? '-'} session=${t.sessionId ?? '-'}`);
   for (const d of s.dispatches) {
     lines.push(`  ${d.dispatchId} ${d.kind} ${d.tier ?? '-'}/${d.effort} ${d.source} exit=${d.exitCode ?? '…'} applied=${d.applied ?? '-'} settings=${d.settingsChanged ?? '-'} report=${d.report ? 'yes' : 'no'}${d.escalatedFrom ? ` from=${d.escalatedFrom}` : ''}`);
@@ -34,19 +35,23 @@ export async function run(argv, ctx) {
   const status = {
     taskId,
     agent: meta.agent,
+    host: meta.host ?? null,
     cwd: meta.cwd,
+    backend: meta.backend ?? 'cmux', owns: meta.owns ?? [],
     tabs: meta.tabs.map((t) => ({
       name: t.name, ref: t.ref, placement: t.placement ?? 'workspace', observe: t.observe, sessionId: t.sessionId,
+      runner: t.observe === 'headless' ? readHeadless(dir, t.dispatchId ?? t.name) : null,
       lifecycle: t.observe === 'hook' ? safe(() => ctx.cmux.sessions(t, meta.agent)[0]?.agent_lifecycle) ?? null : null,
     })),
     dispatches: meta.dispatches.map((d) => ({
-      dispatchId: d.dispatchId, kind: d.kind, tab: d.tab, tier: d.tier, effort: d.effort, source: d.source,
+      dispatchId: d.dispatchId, host: d.host ?? null, kind: d.kind, tab: d.tab, tier: d.tier, effort: d.effort, source: d.source,
+      stage: d.report?.stage ?? d.stage ?? 'work', confidence: d.report?.confidence ?? 'not_run', agent: d.agent ?? meta.agent, model: d.model, attempts: d.attempts ?? [],
       exitCode: d.exitCode, reason: d.verdictReason, applied: d.applied?.status ?? null,
       settingsChanged: d.settingsChanged ? d.settingsChanged.length : null,
       report: fs.existsSync(path.join(dir, reportFileName(d.dispatchId))),
       escalatedFrom: d.escalatedFrom, remindedBy: d.remindedBy,
     })),
-    screen: v['no-screen'] ? null : safe(() => ctx.cmux.readScreen(meta.tabs[meta.tabs.length - 1], 40)),
+    screen: v['no-screen'] || meta.backend === 'headless' ? null : safe(() => ctx.cmux.readScreen(meta.tabs[meta.tabs.length - 1], 40)),
   };
   if (v.json) ctx.out(status);
   else ctx.print(format(status));

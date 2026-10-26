@@ -1,0 +1,630 @@
+{
+  "version": "v0-draft",
+  "models": {
+    "claude": "opus",
+    "codex": "gpt-6.1-sol"
+  },
+  "levels": {
+    "claude": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "codex": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "ultra"
+    ]
+  },
+  "tiers": [
+    {
+      "id": "E1",
+      "name": "가벼움",
+      "signals": [
+        "읽기 전용",
+        "정답이 정해져 있음",
+        "결과를 바로 확인할 수 있음"
+      ],
+      "examples": [
+        "파일·로그 찾기",
+        "요약",
+        "형식 변환",
+        "오탈자"
+      ],
+      "effort": {
+        "claude": "low",
+        "codex": "low"
+      }
+    },
+    {
+      "id": "E2",
+      "name": "보통",
+      "signals": [
+        "범위가 정해진 1~2개 파일 수정",
+        "정해진 절차 실행",
+        "문서 작성"
+      ],
+      "examples": [
+        "문구 수정",
+        "보고서 초안",
+        "정해진 스크립트 실행"
+      ],
+      "effort": {
+        "claude": "medium",
+        "codex": "medium"
+      }
+    },
+    {
+      "id": "E3",
+      "name": "무거움",
+      "signals": [
+        "여러 파일·모듈에 걸친 구현",
+        "원인 조사·디버깅",
+        "테스트 작성"
+      ],
+      "examples": [
+        "기능 구현",
+        "버그 원인 분석",
+        "리팩터링"
+      ],
+      "effort": {
+        "claude": "high",
+        "codex": "high"
+      }
+    },
+    {
+      "id": "E4",
+      "name": "최상",
+      "signals": [
+        "설계·정책 판단",
+        "보안·인증·권한",
+        "금액·재고·정산 정합성",
+        "DB 스키마",
+        "되돌리기 어려운 변경",
+        "원인 불명 장애"
+      ],
+      "examples": [
+        "인증 흐름",
+        "정산 로직",
+        "migration 설계"
+      ],
+      "effort": {
+        "claude": "xhigh",
+        "codex": "xhigh"
+      }
+    }
+  ],
+  "escalation": {
+    "maxPerDispatch": 1
+  },
+  "agentPolicy": {
+    "version": "v0",
+    "default": "claude",
+    "rules": [
+      {
+        "id": "user",
+        "agent": "any",
+        "when": "사용자가 Claude 또는 Codex 를 지정함 / the user named the agent",
+        "signals": [
+          "codex 로 돌려줘",
+          "claude 로 해줘"
+        ]
+      },
+      {
+        "id": "design",
+        "agent": "claude",
+        "when": "디자인 작업 / design work",
+        "signals": [
+          "화면·UI/UX",
+          "디자인 시스템",
+          "목업·프로토타입",
+          "시각 자료·차트 디자인"
+        ]
+      },
+      {
+        "id": "complex-logic",
+        "agent": "codex",
+        "when": "복잡한 로직 설계 / complex logic design",
+        "signals": [
+          "알고리즘",
+          "상태 전이",
+          "도메인 규칙",
+          "정합성 계산",
+          "구조·아키텍처 설계"
+        ]
+      },
+      {
+        "id": "cross-check",
+        "agent": "other",
+        "when": "다른 시각의 검토·교차 확인 / independent review",
+        "signals": [
+          "교차 검토",
+          "second opinion"
+        ]
+      },
+      {
+        "id": "parallel",
+        "agent": "both",
+        "when": "같은 일을 두 방식으로 비교 / compare two implementations",
+        "signals": [
+          "병렬 구현 비교"
+        ]
+      },
+      {
+        "id": "quota",
+        "agent": "other",
+        "when": "한쪽 사용량 한도에 가까움 / one side is near its usage limit",
+        "signals": [
+          "사용량 한도"
+        ]
+      },
+      {
+        "id": "default",
+        "agent": "claude",
+        "when": "그 밖의 경우 / everything else",
+        "signals": []
+      }
+    ],
+    "mixed": "디자인과 복잡한 로직이 섞이면 핵심 산출물 기준으로 고른다. 둘 다 크면 디자인은 Claude, 로직은 Codex 로 나눠 각각 띄운다."
+  },
+  "quota": {
+    "cooldownSeconds": 3600
+  },
+  "chains": {
+    "default": {
+      "E1": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "low"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "low"
+        }
+      ],
+      "E2": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "medium"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "medium"
+        }
+      ],
+      "E3": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "high"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "high"
+        }
+      ],
+      "E4": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "xhigh"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "xhigh"
+        }
+      ]
+    },
+    "design": {
+      "E1": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "low"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "low"
+        }
+      ],
+      "E2": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "medium"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "medium"
+        }
+      ],
+      "E3": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "high"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "high"
+        }
+      ],
+      "E4": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "xhigh"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "xhigh"
+        }
+      ]
+    },
+    "complex-logic": {
+      "E1": [
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "low"
+        },
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "low"
+        }
+      ],
+      "E2": [
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "medium"
+        },
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "medium"
+        }
+      ],
+      "E3": [
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "high"
+        },
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "high"
+        }
+      ],
+      "E4": [
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "xhigh"
+        },
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "xhigh"
+        }
+      ]
+    },
+    "cross-check": {
+      "E1": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "low"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "low"
+        }
+      ],
+      "E2": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "medium"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "medium"
+        }
+      ],
+      "E3": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "high"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "high"
+        }
+      ],
+      "E4": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "xhigh"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "xhigh"
+        }
+      ]
+    },
+    "quota": {
+      "E1": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "low"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "low"
+        }
+      ],
+      "E2": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "medium"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "medium"
+        }
+      ],
+      "E3": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "high"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "high"
+        }
+      ],
+      "E4": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "xhigh"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "xhigh"
+        }
+      ]
+    },
+    "plan": {
+      "E1": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "low"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "low"
+        }
+      ],
+      "E2": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "medium"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "medium"
+        }
+      ],
+      "E3": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "high"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "high"
+        }
+      ],
+      "E4": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "xhigh"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "xhigh"
+        }
+      ]
+    },
+    "work": {
+      "E1": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "low"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "low"
+        }
+      ],
+      "E2": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "medium"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "medium"
+        }
+      ],
+      "E3": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "high"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "high"
+        }
+      ],
+      "E4": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "xhigh"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "xhigh"
+        }
+      ]
+    },
+    "review": {
+      "E1": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "low"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "low"
+        }
+      ],
+      "E2": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "medium"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "medium"
+        }
+      ],
+      "E3": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "high"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "high"
+        }
+      ],
+      "E4": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "xhigh"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "xhigh"
+        }
+      ]
+    },
+    "verify": {
+      "E1": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "low"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "low"
+        }
+      ],
+      "E2": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "medium"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "medium"
+        }
+      ],
+      "E3": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "high"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "high"
+        }
+      ],
+      "E4": [
+        {
+          "agent": "claude",
+          "model": "opus",
+          "effort": "xhigh"
+        },
+        {
+          "agent": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "xhigh"
+        }
+      ]
+    }
+  }
+}

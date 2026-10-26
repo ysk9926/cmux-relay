@@ -20,7 +20,7 @@ export async function run(argv, ctx) {
     ctx.out({ dryRun: true, close: readMeta(ctx.home, taskId).tabs.filter((t) => !t.closed).map((t) => t.ref) });
     return 0;
   }
-  const { closed, failed } = closeTabs(ctx, taskId);
+  const { closed, failed } = await closeTabs(ctx, taskId);
   ctx.out({ taskId, closed, failed, kept: taskDir(ctx.home, taskId) });
   return failed.length ? 2 : 0;
 }

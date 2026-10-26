@@ -37,7 +37,7 @@ test('escalate Claude: --effort 다음 등급 --resume <세션> --fork-session, 
   const { ctx, d1 } = await spawned();
   setDispatch(ctx, 0, { exitCode: 4 });
   fs.writeFileSync(path.join(ctx.home, 'tasks/t', `report-${d1}.json`), JSON.stringify({ taskId: 't', dispatchId: d1, status: 'failed', summary: '타입 오류 3건' }));
-  const r = await runRelay(['escalate', 't', '--from', d1], ctx);
+  const r = await runRelay(['escalate', 't', '--from', d1, '--host', 'codex'], ctx);
   assert.equal(r.code, 0);
   assert.deepEqual(r.last.requested, { tier: 'E2', model: 'opus', effort: 'medium', source: 'auto' });
   // 승급 탭도 split 이라 오른쪽 열의 맨 아래(여기서는 실패한 자식 아래)로 분할된다
@@ -51,6 +51,7 @@ test('escalate Claude: --effort 다음 등급 --resume <세션> --fork-session, 
   assert.ok(launch.includes('타입 오류 3건'));
   assert.equal(meta.dispatches[0].escalatedTo, meta.dispatches[1].dispatchId);
   assert.equal(meta.dispatches[1].escalatedFrom, d1);
+  assert.equal(meta.dispatches[1].host, 'codex');
   assert.deepEqual([meta.tabs[1].uuid, meta.tabs[1].surface, meta.tabs[1].sessionId, meta.tabs[1].observe], [ORCH.workspace, SURFACES[1], 'S2', 'hook']);
   setDispatch(ctx, 1, { exitCode: 4 });
   const again = await runRelay(['escalate', 't', '--from', meta.dispatches[1].dispatchId], ctx);
