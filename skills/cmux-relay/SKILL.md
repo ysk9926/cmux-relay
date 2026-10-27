@@ -51,7 +51,7 @@ relay spawn --host codex --backend headless --kind work --stage work --task fix-
 
 - Claude Code: 백그라운드 Bash로 걸고 알림을 기다린다.
 - Codex: 실행 도구가 반환한 실행 세션을 이어 기다린다. 도구 제한에 맞는 timeout을 사용한다. 목록을 반복 조회하지 않는다.
-- 0이면 탭/실행기 정리. 후속 지시가 필요하면 `--keep-open`을 쓴다. task 폴더·로그·worktree는 보존한다.
+- 0이면 탭/실행기 정리. 후속 지시가 필요하면 `--keep-open`을 쓴다. task 폴더·로그·세션 기록과 Git 브랜치는 보존한다. 깨끗한 관리 worktree는 제거하며 미저장 변경이 있으면 보존하고 cleanup.failed에 이유를 남긴다.
 
 | 종료코드 | 처리 |
 |---|---|
@@ -80,7 +80,7 @@ relay workflow advance parser-flow --host codex --timeout 300
 relay workflow status parser-flow
 ```
 
-advance를 단계마다 실행한다. plan → work → review(실제 work 제공사 반대편) → verify 순서다.
+advance를 단계마다 실행한다. work 실행기는 review·verify가 끝날 때까지 유지하고, 검증 성공 시 모든 단계 실행기와 깨끗한 worktree를 정리한다. 정리 실패는 workflow.cleanup에서 확인하고 close로 재시도한다. plan → work → review(실제 work 제공사 반대편) → verify 순서다.
 이전 보고서를 다음 단계에 전달하며 실패·질문·부적합 보고에서 멈춘다. 모델별 한도 전환 후에도 실제 실행 제공사를 기준으로 review한다.
 질문에 답하거나 실패를 수정해 같은 단계로 이어가려면 `relay send` 후 `relay workflow resume <id> --dispatch <새 dispatchId>`로 연결한다.
 

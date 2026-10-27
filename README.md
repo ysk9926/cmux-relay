@@ -124,7 +124,7 @@ headless `applied`는 플래그만 확인하므로 unverified입니다. cmux는 
 | 6 | cmux 권한 대기 |
 | 124 | 시간 초과 (실행은 유지) |
 
-0이면 정리하며 `--keep-open`이면 후속 지시를 위해 유지합니다. 나머지는 자동으로 닫지 않습니다.
+0이면 실행기와 깨끗한 관리 worktree를 정리하며 (로그·세션 기록·Git 브랜치는 보존), `--keep-open`이면 후속 지시를 위해 유지합니다. 나머지는 자동으로 닫지 않습니다.
 자동 등급 실패는 `relay escalate TASK --from DISPATCH --host HOST`로 effort 한 단계, 한 번만 승급할 수 있습니다.
 close한 작업에는 send/escalate할 수 없습니다.
 
@@ -137,7 +137,7 @@ close한 작업에는 send/escalate할 수 없습니다.
   ownership/<task>.json          # 파일 담당 예약
   quota-events.jsonl            # 실제 한도 신호
   effort-log.jsonl              # 모델·호스트·시간·결과·전환 기록
-  worktrees/<task>/             # 보존되는 작업 체크아웃
+  worktrees/<task>/             # 완료 시 제거되는 작업 체크아웃 (미저장 변경은 보존)
 ```
 
 `--host` → `RELAY_HOST` → CLI 환경표식 순서로 호스트를 판별합니다. 두 표식이 함께 있으면 명시해야 합니다.
@@ -145,7 +145,7 @@ close한 작업에는 send/escalate할 수 없습니다.
 Claude Code는 wait를 백그라운드 Bash에 걸고, Codex는 실행 도구가 반환한 세션을 이어 기다립니다.
 
 알려진 자식 창은 탐색 실패 시에도 metadata에 보존합니다. headless close는 실행기 신원을 확인하고 프로세스 그룹 종료를 기다립니다.
-정리 실패는 ownership을 유지합니다. 비정상 종료로 워크플로 `.lock`, 작업 `.operation.lock` 또는 `ownership.lock`이 남으면 상태·PID·자식을 확인한 뒤 정리해야 합니다.
+실행기 종료 실패는 ownership을 유지합니다. worktree 제거 실패는 `cleanup.failed`에 남기며 `close`로 재시도합니다. 워크플로는 검증 성공 후 정리하고 결과를 `workflow.cleanup`에 남깁니다. 비정상 종료로 워크플로 `.lock`, 작업 `.operation.lock` 또는 `ownership.lock`이 남으면 상태·PID·자식을 확인한 뒤 정리해야 합니다.
 검증 중 강제 종료는 부수효과가 있을 수 있어 자동 재실행하지 않습니다. 영수증과 실제 상태를 먼저 확인합니다.
 
 ## 검증

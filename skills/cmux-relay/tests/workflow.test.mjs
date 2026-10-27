@@ -11,11 +11,11 @@ function fixture(t, result = 0) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-workflow-')); t.after(() => fs.rmSync(home, { recursive: true, force: true }));
   const brief = path.join(home, 'input.md'); fs.writeFileSync(brief, 'Do the work');
   const calls = []; const checks = [];
-  const ctx = { home, skillDir: path.resolve('skills/cmux-relay'), out() {}, print() {}, async workflowSpawn(args) {
+  const ctx = { home, now: () => new Date(), skillDir: path.resolve('skills/cmux-relay'), out() {}, print() {}, async workflowSpawn(args) {
     calls.push(args); const get = name => args[args.indexOf(name) + 1]; const taskId = get('--task'), stage = get('--stage');
     const dir = createTask(home, taskId); const report = { taskId, dispatchId: 'd', status: 'done', stage, confidence: 'reported_done', summary: 'ok' };
     writeFile600(path.join(dir, 'report-d.json'), JSON.stringify(report));
-    writeMeta(home, taskId, { agent: stage === 'work' ? 'codex' : 'claude', dispatches: [{ dispatchId: 'd', exitCode: 0, report }] }); return 0;
+    writeMeta(home, taskId, { tabs: [], agent: stage === 'work' ? 'codex' : 'claude', dispatches: [{ dispatchId: 'd', exitCode: 0, report }] }); return 0;
   }, async workflowWait() { throw Error('completed dispatch must not be waited again'); }, async runVerification(input) { checks.push(input); return { status: result, stdout: 'check output' }; } };
   const start = () => run(['start', '--task', 'demo', '--brief', brief, '--tier', 'E3', '--tier-reason', 'complex'], ctx);
   const state = () => JSON.parse(fs.readFileSync(path.join(home, 'workflows/demo/workflow.json')));
@@ -32,6 +32,8 @@ test('workflow persists stages, alternates review, gates approval and executes t
   assert.equal(await run(['approve', 'demo', '--command', 'node --test', '--approval', 'User explicitly approves node --test'], f.ctx), 3);
   assert.equal(f.checks.length, 0);
   assert.equal(await run(['advance', 'demo'], f.ctx), 0); assert.equal(f.state().status, 'done'); assert.equal(f.checks.length, 1);
+  assert.equal(f.state().cleanup.length, 4);
+  assert.ok(f.state().cleanup.every(entry => entry.failed.length === 0));
   const receipt = JSON.parse(fs.readFileSync(path.join(f.home, 'tasks/demo-verify/verification/receipts.json')))[0];
   assert.equal(receipt.approved, true); assert.equal(receipt.executed, true); assert.equal(receipt.exitCode, 0);
   assert.equal(fs.statSync(path.join(f.home, 'tasks/demo-verify/verification/receipts.json')).mode & 0o777, 0o600);
@@ -126,4 +128,14 @@ test('resume binds a new latest same-task dispatch without replaying work', asyn
   assert.equal(f.state().status, 'running'); assert.equal(f.state().stages[0].dispatchId, 'd2'); assert.match(f.state().stages[0].reportPath, /report-d2.json$/); assert.equal(f.calls.length, 1);
   f.ctx.workflowWait = async () => 124;
   assert.equal(await run(['advance', 'demo'], f.ctx), 124);
+});
+
+test('work wait keeps execution resources until workflow verification completes', async t => {
+  const f = fixture(t); await f.start(); await run(['advance', 'demo'], f.ctx);
+  const p = path.join(f.home, 'tasks/demo-work/meta.json');
+  const meta = JSON.parse(fs.readFileSync(p)); meta.dispatches[0].exitCode = null; fs.writeFileSync(p, JSON.stringify(meta));
+  let args;
+  f.ctx.workflowWait = async input => { args = input; return 0; };
+  await run(['advance', 'demo'], f.ctx);
+  assert.ok(args.includes('--keep-open'));
 });

@@ -157,7 +157,7 @@ export function childPlan(ctx, { placement, name, cwd, env, command }) {
   return ['cmux', 'new-split', below ? 'down' : 'right', '--workspace', parent.workspace, '--surface', below ?? parent.surface, '--command', command];
 }
 
-// 작업의 열린 탭을 모두 닫는다. 작업 폴더·세션 기록·worktree 는 남긴다. 이미 닫은 탭은 건너뛴다.
+// 열린 실행기를 닫고 관리 중인 깨끗한 worktree를 제거한다. 기록과 브랜치는 보존한다.
 export async function closeTabs(ctx, taskId, forDispatch = null) {
   return taskOperation(ctx, taskId, async () => {
   const meta = readMeta(ctx.home, taskId);
@@ -187,7 +187,24 @@ export async function closeTabs(ctx, taskId, forDispatch = null) {
     meta.closedAt ??= ctx.now().toISOString();
     releaseOwnership(ctx.home, taskId);
   }
+  let worktree;
+  if (meta.worktree && meta.tabs.every(t => t.closed)) {
+    const root = path.resolve(ctx.home, 'worktrees', taskId);
+    try {
+      if (fs.existsSync(root)) {
+        const top = ctx.runGit(['-C', root, 'rev-parse', '--show-toplevel']).trim();
+        if (fs.realpathSync(top) !== fs.realpathSync(root)) throw new Error('managed worktree root mismatch');
+        // No --force: Git protects untracked files, modified files and submodules.
+        ctx.runGit(['-C', root, 'worktree', 'remove', root]);
+      }
+      worktree = { path: root, status: 'removed' };
+    } catch (error) {
+      worktree = { path: root, status: 'retained', reason: String(error.stderr || error.message).trim() };
+      failed.push({ path: root, error: worktree.reason });
+    }
+    meta.worktreeCleanup = worktree;
+  }
   writeMeta(ctx.home, taskId, meta);
-  return { closed, failed };
+  return { closed, failed, ...(worktree ? { worktree } : {}) };
   });
 }

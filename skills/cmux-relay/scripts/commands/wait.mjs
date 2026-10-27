@@ -20,7 +20,7 @@ export const HELP = `relay wait — 지시 하나의 결과를 판정한다 (백
   relay wait <task> --dispatch <id> [--timeout 초(기본 300)] [--keep-open] [--dry-run]
 종료코드: 0 완료 · 3 질문 보고 · 4 실패 · 5 보고 없이 멈춤 · 6 권한 대기 · 124 시간 초과
 끝날 때 실제 model·effort 대조(applied)와 전역 설정 변화(settingsChanged)를 함께 출력한다.
-0(완료)이면 작업의 탭을 모두 닫는다(작업 폴더·세션 기록 보존). 후속 지시를 보낼 거면 --keep-open.
+0(완료)이면 작업의 탭을 모두 닫는다(깨끗한 worktree 제거, 기록·브랜치 보존). 후속 지시를 보낼 거면 --keep-open.
 codex fork 탭은 훅 이벤트가 없어 rollout 으로 완료를 보며, 권한 대기는 감지하지 못한다.`;
 
 export async function run(argv, ctx) {

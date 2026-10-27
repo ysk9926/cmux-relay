@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
+import { closeTabs } from './common.mjs';
 import { run as spawnRun } from './spawn.mjs';
 import { run as waitRun } from './wait.mjs';
 import { validateTaskId, taskDir, createTask, readMeta, writeMeta, writeFile600 } from '../lib/store.mjs';
@@ -104,13 +105,13 @@ export async function run(argv, ctx) {
       }
       if (action === 'advance') {
         state.host = resolveHost(v.host, ctx.env ?? {}) ?? state.host;
-        if (['done', 'failed', 'needs_input'].includes(state.status)) { ctx.out(state); return state.status === 'done' ? 0 : state.status === 'failed' ? 4 : 3; }
+        if (['done', 'failed', 'needs_input'].includes(state.status)) { if (state.status === 'done') { await cleanupWorkflow(state, ctx); save(dir, state); } ctx.out(state); return state.status === 'done' ? 0 : state.status === 'failed' ? 4 : 3; }
         if (state.stage !== 'verify') {
           const current = state.stages.at(-1);
           let meta = readMeta(ctx.home, current.taskId);
           let dispatch = meta.dispatches.find(d => d.dispatchId === current.dispatchId);
           let code = dispatch.exitCode;
-          if (![0, 3, 4].includes(code)) code = await (ctx.workflowWait ?? waitRun)([current.taskId, '--dispatch', current.dispatchId, '--timeout', v.timeout], { ...ctx, out: () => {} });
+          if (![0, 3, 4].includes(code)) code = await (ctx.workflowWait ?? waitRun)([current.taskId, '--dispatch', current.dispatchId, '--timeout', v.timeout, ...(state.stage === 'work' ? ['--keep-open'] : [])], { ...ctx, out: () => {} });
           if (code !== 0) { if ([3, 4].includes(code)) { state.status = code === 3 ? 'needs_input' : 'failed'; save(dir, state); } ctx.out(state); return code; }
           // Read child file with task identity, even if a cached dispatch.report exists.
           const parsed = parseReport(fs.existsSync(current.reportPath) ? fs.readFileSync(current.reportPath, 'utf8') : '', current.dispatchId, { taskId: current.taskId });
@@ -140,11 +141,19 @@ export async function run(argv, ctx) {
           const reportPath = path.join(verifyDir, reportFileName(dispatchId));
           writeFile600(reportPath, JSON.stringify(report, null, 2) + '\n');
           writeMeta(ctx.home, taskId, { taskId, backend: 'relay', cwd: state.cwd, tabs: [], dispatches: [{ dispatchId, stage: 'verify', exitCode: passed ? 0 : 4, report, finishedAt: new Date().toISOString() }] });
-          state.stages.push({ stage: 'verify', taskId, dispatchId, reportPath }); state.status = passed ? 'done' : 'failed'; save(dir, state);
+          state.stages.push({ stage: 'verify', taskId, dispatchId, reportPath }); state.status = passed ? 'done' : 'failed'; if (passed) await cleanupWorkflow(state, ctx); save(dir, state);
         }
       }
     }
     ctx.out(state);
     return state.status === 'awaiting_approval' ? 3 : state.status === 'failed' ? 4 : 0;
   } finally { fs.closeSync(fd); if (fs.existsSync(lock)) fs.unlinkSync(lock); }
+}
+
+async function cleanupWorkflow(state, ctx) {
+  state.cleanup = [];
+  for (const entry of state.stages) {
+    try { state.cleanup.push({ taskId: entry.taskId, ...await closeTabs(ctx, entry.taskId) }); }
+    catch (error) { state.cleanup.push({ taskId: entry.taskId, failed: [{ error: error.message }] }); }
+  }
 }
