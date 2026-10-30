@@ -16,11 +16,13 @@ import * as closeCmd from './commands/close.mjs';
 import * as listCmd from './commands/list.mjs';
 import * as workflowCmd from './commands/workflow.mjs';
 import * as routeCmd from './commands/route.mjs';
+import * as configCmd from './commands/config.mjs';
 
-const COMMANDS = { workflow: workflowCmd, route: routeCmd, spawn: spawnCmd, wait: waitCmd, send: sendCmd, escalate: escalateCmd, status: statusCmd, close: closeCmd, list: listCmd };
+const COMMANDS = { config: configCmd, workflow: workflowCmd, route: routeCmd, spawn: spawnCmd, wait: waitCmd, send: sendCmd, escalate: escalateCmd, status: statusCmd, close: closeCmd, list: listCmd };
 
 export const HELP = `relay <command> [options] — 공식 CLI 자식을 cmux·헤드리스로 실행하고 보고를 돌려받는다
-  route     routing.yaml 후보·quota cooldown 조회 (읽기 전용)
+  config    개인 agent·모델·작업 유형 설정 조회·저장·초기화
+  route     개인 설정을 반영한 후보·quota cooldown 조회 (읽기 전용)
   workflow  plan → work → review → 승인된 verify 실행
   spawn     cmux 분할·탭 또는 헤드리스 자식 실행 (등급·effort 필수)
   wait      완료·질문·실패·보고 없음·권한 대기·시간 초과 판정 (0·3·4·5·6·124)

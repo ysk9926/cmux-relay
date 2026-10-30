@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-30 — personal agent and model settings
+
+- Add `relay config show|set|reset` with dry-run, validated/atomic private settings in `RELAY_HOME/config.json`, enabled providers, default/per-kind preferences and provider model overrides.
+- Apply personal preferences to new route previews, cmux/headless tasks and workflow stages; disabled providers cannot appear in new quota candidates or explicit-agent launches.
+- Support single-provider workflows with separate same-provider review tasks and recorded `reviewMode`; explicit cross-check still requires an enabled other provider.
+- Keep existing task models during effort escalation even after preferences change. Add an in-skill configuration mode and guide, plus temporary-settings/fake-CLI coverage.
+
 ## 2026-10-26 — host-independent subscription CLI harness
 
 - Support Claude/Codex hosts with explicit host detection and per-dispatch handoff records.

@@ -20,7 +20,7 @@ export const HELP = `relay spawn — 오케스트레이터 옆 cmux 분할·탭�
   --kind default|design|complex-logic|plan|work|review|verify
   --stage plan|work|review|verify           보고 단계 (기본 work)
   --owns <relative-path>                   담당 파일·디렉터리 (반복 가능, 겹치면 거부)
-  --agent-rule <id>                        에이전트 선택 규칙(config/agent-policy.json): user|design|complex-logic|cross-check|parallel|quota|default
+  --agent-rule <id>                        에이전트 선택 규칙(routing.yaml + 개인 설정): user|design|complex-logic|cross-check|parallel|quota|default
   --task <id>                              작업 ID: 소문자·숫자·하이픈 (필수)
   --brief <file>                           지시서 파일 (필수)
   --tier E1..E4 --tier-reason "<근거>"      자동 판정 등급
@@ -63,7 +63,7 @@ async function spawnTask(argv, ctx) {
   checkPreset({ preset: v.preset });
   checkPlacement(v.placement);
   if (v.backend === 'cmux' && v.placement !== 'workspace') requireCaller(ctx, v.placement); // worktree 를 만들기 전에 거부
-  const r = resolveRoute(readRouting(ctx.skillDir), { agent: v.agent, tier: v.tier, tierReason: v['tier-reason'], effort: v.effort, rule: v['agent-rule'], host, previousAgent: v['previous-agent'], kind: v.kind, home: ctx.home, now: ctx.now() });
+  const r = resolveRoute(readRouting(ctx.skillDir, { home: ctx.home }), { agent: v.agent, tier: v.tier, tierReason: v['tier-reason'], effort: v.effort, rule: v['agent-rule'], host, previousAgent: v['previous-agent'], kind: v.kind, home: ctx.home, now: ctx.now() });
   const agent = r.agent;
   const agentRule = v['agent-rule'] === undefined && v.agent ? null : r.agentRule;
   if (!v.brief || !fs.existsSync(v.brief)) throw new RelayError('BRIEF_NOT_FOUND', `brief not found: ${v.brief}`);

@@ -51,6 +51,7 @@ export async function run(argv, ctx) {
   if (fromTab.observe !== 'headless' && !fromTab.sessionId) throw new RelayError('SESSION_UNKNOWN', `no session id for tab ${fromTab.name}`);
 
   const r = resolveEffort(tiers, { agent: meta.agent, tier: decision.nextTier, tierReason: `escalated from ${from.dispatchId} (${decision.reason})` });
+  r.model = from.model ?? r.model; // Escalation raises effort within the task's original model.
   const dir = taskDir(ctx.home, taskId);
   const dispatchId = newDispatchId(meta.dispatches.length + 1, 'e');
   const tabName = `${fromTab.name}-e`;

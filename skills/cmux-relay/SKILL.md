@@ -1,6 +1,6 @@
 ---
 name: cmux-relay
-description: Claude Code·Codex 어느 세션에서든 공식 CLI 자식에게 일을 맡기는 파일 기반 에이전트 하네스. cmux 분할·탭 또는 헤드리스 실행, 작업 유형별 모델·effort 라우팅, 사용량 한도 전환, 교차 검토와 승인된 검증을 지원한다. "codex로 맡겨줘", "다른 모델로 검토해줘", "창 없이 돌려줘", "plan부터 검증까지 진행해줘" 같은 요청에 사용한다.
+description: Claude Code·Codex 공식 CLI에 작업을 맡기거나 relay의 개인 agent·모델 설정을 조회·변경할 때 사용한다. "codex로 맡겨줘", "다른 모델로 검토해줘", "창 없이 돌려줘", "plan부터 검증까지 진행해줘", "relay는 Codex만 써", "relay 모델 설정해줘" 같은 요청에 적용한다.
 ---
 
 # cmux-relay 하네스
@@ -9,16 +9,21 @@ description: Claude Code·Codex 어느 세션에서든 공식 CLI 자식에게 �
 원본은 `~/.agents/skills/cmux-relay`, Claude·Codex 경로는 이 원본의 symlink다.
 모델은 공식 `claude`·`codex` CLI로만 실행한다. 토큰 추출·프록시·Hermes·API 호출을 추가하지 않는다.
 
+## 개인 설정 모드
+
+"Claude만 사용", "Codex만 사용", "기본 agent/모델 변경", "작업별 agent 설정"처럼 **앞으로의 relay 기본값**을 바꾸는 요청이면 [설정 가이드](references/configuration.md)를 읽고 `relay config`로 저장한다. 일회성 작업 지정은 개인 설정을 바꾸지 않는다.
+`relay config show`로 현재 값과 파일 경로를 확인한다. 사용자가 지정한 항목만 변경하고, 모델·구독·설치된 CLI를 임의로 추정하지 않는다. 설정만 바꾸는 요청에서는 자식을 띄우지 않는다.
+
 ## 1. 호스트와 라우팅
 
 - `spawn/send/escalate`, `workflow start/advance`에는 현재 `--host claude|codex`를 명시한다.
   생략 시 `RELAY_HOST` → `CLAUDECODE` 또는 `CODEX_THREAD_ID`로 추정한다. 둘 다 있으면 명시해야 한다. 알 수 없으면 null로 기록한다.
-- 설정은 **`config/routing.yaml` 하나**다. 외부 의존성 없이 읽기 위해 JSON 문법의 YAML 1.2를 쓴다. 일반 YAML 축약 문법은 지원하지 않는다.
+- 배포 기본값은 `config/routing.yaml`, 개인 설정은 **`~/.agent-relay/config.json`**이다(`RELAY_HOME` 지정 시 그 아래). 개인 설정은 스킬 업데이트와 분리된다. YAML은 외부 의존성 없이 읽기 위해 JSON 문법의 YAML 1.2를 쓰며 일반 YAML 축약 문법은 지원하지 않는다.
   `agentPolicy`의 순서대로 의미를 판단하고 `--agent-rule`로 전달한다. 사용자 지정 → 디자인 → 복잡한 로직 → 교차 검토 → 병렬 비교 → 한도 → 기본 순이다.
-- 디자인은 Claude 우선, 복잡한 로직은 Codex 우선, 기본은 Claude다. `chains.<kind>.<tier>`의 `{agent,model,effort}` 후보 순서를 따른다.
+- 개인 설정이 없으면 디자인은 Claude 우선, 복잡한 로직은 Codex 우선, 기본은 Claude다. 개인 설정의 허용 agent 안에서 명시적 `--agent` → 작업 유형별 선호 → 개인 기본값 → 배포 후보 순서를 적용한다. 명시적 `--agent-rule`의 제약도 지켜야 한다. 개인 모델은 모든 해당 agent 후보에 적용된다.
   `--kind plan|work|review|verify|design|complex-logic|default`로 유형을 고른다.
 - `cross-check`는 `--previous-agent`로 직전 실제 실행 에이전트를 넘긴다. `quota`는 한도가 찬 에이전트를 넘긴다. 생략 시 현재 host 기준이다.
-  교차 검토는 기준 에이전트와 같은 쪽으로 돌아가지 않는다. `parallel`은 파일 담당을 나눠 각각 spawn한다.
+  교차 검토는 기준 에이전트와 같은 쪽으로 돌아가지 않는다. 다른 agent가 비활성이면 명시적 교차 검토·한도 전환은 실패하며 설정 변경을 안내한다. `parallel` 비교는 양쪽을 활성화했을 때 파일 담당을 나눠 각각 spawn한다.
 - **사용자가 특정 에이전트를 요청했을 때만 `--agent`를 명시한다.** 이 옵션 또는 사용자 지정 `--effort`가 있으면 provider를 고정하고 자동 전환하지 않는다.
 - 사용자 지정이 없으면 신호 중 가장 높은 E1~E4를 고르고 `--tier`와 `--tier-reason`을 넘긴다. 애매하면 한 등급 위.
   금액·재고·정산·권한·DB 스키마는 한 줄이어도 E4다. max·ultra는 사용자 명시 경로에서만 쓴다.
@@ -64,7 +69,7 @@ relay spawn --host codex --backend headless --kind work --stage work --task fix-
 
 - 공식 CLI의 사용량 한도 신호가 확인된 실패만 다음 후보로 자동 전환한다. 일반 오류·단순 HTTP 429·성공한 답변 속 한도 언급은 재실행하지 않는다.
 - 시도별 증거와 전환 사실은 보고서 `routing`, dispatch와 effort 로그에 남긴다. 이전 시도 보고서는 보관하고 새 시도 완료로 쓰지 않는다.
-- 양쪽 한도 초과 또는 사용자 고정이면 실패를 보고한다. `quota-events.jsonl`의 최근 한도 기록은 다음 자동 라우팅에서 해당 제공사를 잠시 제외한다.
+- 허용된 agent의 한도 초과 또는 사용자 고정이면 실패를 보고한다. 비활성 agent로 전환하지 않는다. `quota-events.jsonl`의 최근 한도 기록은 다음 자동 라우팅에서 해당 제공사를 잠시 제외한다.
   기본 cooldown 1시간은 로컬 스케줄링 기준이며 실제 제공사 초기화 시간이나 잔여량을 뜻하지 않는다. 모르는 토큰·비용은 null이다.
 - `applied.status != match`, 설정 변경, 정리 실패는 사용자에게 알린다. headless는 실행 플래그만 확인하므로 applied=unverified다.
 - 후속: `relay send <task> --host codex --message "경계 조건도 확인"` 또는 `--file <path>`.
@@ -80,8 +85,8 @@ relay workflow advance parser-flow --host codex --timeout 300
 relay workflow status parser-flow
 ```
 
-advance를 단계마다 실행한다. work 실행기는 review·verify가 끝날 때까지 유지하고, 검증 성공 시 모든 단계 실행기와 깨끗한 worktree를 정리한다. 정리 실패는 workflow.cleanup에서 확인하고 close로 재시도한다. plan → work → review(실제 work 제공사 반대편) → verify 순서다.
-이전 보고서를 다음 단계에 전달하며 실패·질문·부적합 보고에서 멈춘다. 모델별 한도 전환 후에도 실제 실행 제공사를 기준으로 review한다.
+advance를 단계마다 실행한다. work 실행기는 review·verify가 끝날 때까지 유지하고, 검증 성공 시 모든 단계 실행기와 깨끗한 worktree를 정리한다. 정리 실패는 workflow.cleanup에서 확인하고 close로 재시도한다. plan → work → review → verify 순서다.
+이전 보고서를 다음 단계에 전달하며 실패·질문·부적합 보고에서 멈춘다. 실제 work 제공사 반대편이 활성화되어 있으면 그쪽에서 review한다. 하나만 계속 사용하면 같은 제공사의 별도 작업에서 검토하고 `reviewMode: same-provider`로 기록한다. 이를 교차 검토라고 보고하지 않는다.
 질문에 답하거나 실패를 수정해 같은 단계로 이어가려면 `relay send` 후 `relay workflow resume <id> --dispatch <새 dispatchId>`로 연결한다.
 
 **verify는 자동 승인하지 않는다.** 사용자가 실제로 승인한 명령과 원문을 기록한다:
@@ -99,6 +104,7 @@ verified는 승인·실제 실행·성공 영수증이 있어야 하며 자식 �
 ## 5. 이어받기·복구
 
 - 양쪽 호스트가 같은 `~/.agent-relay`(또는 `RELAY_HOME`)를 쓴다. `list`, `status --json --no-screen`, `workflow status`로 진단한다.
+- 개인 설정은 새 spawn·workflow 단계에 적용된다. 생성된 작업의 send·escalate는 기존 agent·모델을 유지하며, 이미 실행 중인 작업의 후보를 소급 변경하지 않는다.
 - 호스트가 바뀌면 다음 send/escalate/workflow advance에 현재 host를 넘긴다. 최초 host와 지시별 host는 각각 보존한다.
 - Codex 샌드박스에서 cwd/worktree, RELAY_HOME와 cmux 소켓 접근이 필요하다. 설정은 환경별로 맞추고 자동으로 전체 권한을 풀지 않는다.
 - 창 탐색 실패 후에도 알려진 자식과 파일 예약을 보존한다. status로 확인하고 close한다. 부모 프로세스가 죽었다고 자식까지 끝났다고 가정하지 않는다.

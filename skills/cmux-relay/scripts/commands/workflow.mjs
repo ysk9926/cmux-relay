@@ -10,6 +10,7 @@ import { newDispatchId, reportFileName } from '../lib/dispatch.mjs';
 import { executeVerification } from '../lib/verification.mjs';
 import { RelayError } from '../lib/errors.mjs';
 import { resolveHost } from '../lib/host.mjs';
+import { readRouting } from '../lib/routing.mjs';
 
 export const HELP = `relay workflow start --task ID --brief FILE --tier E3 --tier-reason TEXT [--backend headless|cmux --owns PATH]
 relay workflow advance ID [--timeout SECONDS]
@@ -23,11 +24,15 @@ const save = (dir, state) => writeFile600(path.join(dir, 'workflow.json'), JSON.
 async function launch(state, dir, stage, ctx) {
   const taskId = `${state.id}-${stage}`;
   const prior = state.stages.map(entry => `${entry.stage}: ${entry.reportPath}`).join('\n');
+  if (stage === 'review') {
+    const routing = readRouting(ctx.skillDir, { home: ctx.home });
+    state.reviewMode = routing.preferences.allowedAgents.some(agent => agent !== state.workAgent) ? 'cross-provider' : 'same-provider';
+  }
   const brief = path.join(dir, `${stage}.md`);
-  writeFile600(brief, `${state.brief}\n\nWorkflow stage: ${stage}. Report stage must be "${stage}". ${stage === 'plan' ? 'Produce a plan; do not implement changes.' : stage === 'review' ? 'Review the work and report failed if changes are required.' : 'Implement the approved scope.'}\nPrevious stage reports (read for context):\n${prior}\nDo not claim verified; verification is performed by relay after explicit command approval.\n`);
+  writeFile600(brief, `${state.brief}\n\nWorkflow stage: ${stage}. Report stage must be "${stage}". ${stage === 'plan' ? 'Produce a plan; do not implement changes.' : stage === 'review' ? `Review mode: ${state.reviewMode}. Review the work and report failed if changes are required.` : 'Implement the approved scope.'}\nPrevious stage reports (read for context):\n${prior}\nDo not claim verified; verification is performed by relay after explicit command approval.\n`);
   const args = ['--task', taskId, '--brief', brief, '--tier', state.tier, '--tier-reason', state.tierReason, '--cwd', state.cwd, '--backend', state.backend, '--preset', state.preset, '--stage', stage, '--kind', stage === 'work' ? state.kind : stage];
   if (state.host) args.push('--host', state.host);
-  if (stage === 'review') args.push('--previous-agent', state.workAgent, '--agent-rule', 'cross-check');
+  if (stage === 'review' && state.reviewMode === 'cross-provider') args.push('--previous-agent', state.workAgent, '--agent-rule', 'cross-check');
   if (stage === 'work') {
     for (const owned of state.owns) args.push('--owns', owned);
     if (state.worktree) args.push('--worktree');
@@ -39,7 +44,7 @@ async function launch(state, dir, stage, ctx) {
   if (stage === 'work') state.workAgent = meta.agent ?? dispatch.agent;
   state.stage = stage;
   state.status = 'running';
-  state.stages.push({ stage, taskId, dispatchId: dispatch.dispatchId, reportPath: path.join(taskDir(ctx.home, taskId), reportFileName(dispatch.dispatchId)) });
+  state.stages.push({ stage, taskId, dispatchId: dispatch.dispatchId, reportPath: path.join(taskDir(ctx.home, taskId), reportFileName(dispatch.dispatchId)), ...(stage === 'review' ? { reviewMode: state.reviewMode } : {}) });
   save(dir, state);
 }
 

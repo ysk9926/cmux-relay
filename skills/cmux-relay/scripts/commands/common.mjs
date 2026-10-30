@@ -13,11 +13,11 @@ export const CLAUDE_SETTINGS = '~/.claude/settings.json';
 export const CODEX_CONFIG = '~/.codex/config.toml';
 
 export function readAgentPolicy(ctx) {
-  return readRouting(ctx.skillDir).agentPolicy;
+  return readRouting(ctx.skillDir, { home: ctx.home }).agentPolicy;
 }
 
 export function readTiers(ctx) {
-  return readRouting(ctx.skillDir);
+  return readRouting(ctx.skillDir, { home: ctx.home });
 }
 
 function readIfExists(p) {

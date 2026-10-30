@@ -10,7 +10,7 @@ export async function run(argv, ctx) {
     ...['quota','help','dry-run'].map(k => [k,{type:'boolean'}]),
   ]) });
   if (v.help) { ctx.print(HELP); return 0; }
-  const c = readRouting(ctx.skillDir);
+  const c = readRouting(ctx.skillDir, { home: ctx.home });
   if (v.quota) ctx.out({ cooldownSeconds: c.quota.cooldownSeconds, blocked: quotaState(ctx.home, { now: ctx.now(), cooldownSeconds: c.quota.cooldownSeconds }) });
   else ctx.out(resolveRoute(c, { kind: v.kind, tier: v.tier, tierReason: v['tier-reason'], host: resolveHost(v.host, ctx.env), agent: v.agent, effort: v.effort, rule: v['agent-rule'], previousAgent: v['previous-agent'], home: ctx.home, now: ctx.now() }));
   return 0;

@@ -81,6 +81,47 @@ test('workflow runs plan work review then requires approval before executing ver
   const receipts=JSON.parse(fs.readFileSync(path.join(h.home,'tasks/flow-verify/verification/receipts.json')));assert.equal(receipts[0].executed,true);assert.equal(receipts[0].approved,true);
 });
 
+test('personal single-provider workflows launch only the selected CLI and model in every model stage', async t => {
+  for (const agent of ['claude', 'codex']) {
+    const h = harness(t);
+    assert.equal((await h.run(['config', 'set', '--agents', agent, `--${agent}-model`, 'personal-model'])).code, 0);
+    const start = await h.run(['workflow', 'start', '--task', 'personal', '--brief', path.join(h.base, 'brief.md'), '--tier', 'E1', '--tier-reason', 'personal settings', '--cwd', h.base]);
+    assert.equal(start.code, 0, JSON.stringify(start.last));
+    for (const stage of ['work', 'review', 'verify']) {
+      const result = await h.run(['workflow', 'advance', 'personal', '--timeout', '8']);
+      assert.equal(result.last.stage, stage, JSON.stringify(result.last));
+    }
+    const calls = h.calls();
+    assert.equal(calls.length, 3);
+    assert.ok(calls.every(call => call.agent === agent));
+    for (const call of calls) assert.equal(call.args[call.args.indexOf(agent === 'claude' ? '--model' : '-m') + 1], 'personal-model');
+    const status = await h.run(['workflow', 'status', 'personal']);
+    assert.equal(status.last.reviewMode, 'same-provider');
+  }
+});
+
+test('personal Claude-only quota failure never invokes disabled Codex', async t => {
+  const h = harness(t, 'quota');
+  await h.run(['config', 'set', '--agents', 'claude']);
+  assert.equal((await h.spawn()).code, 0);
+  assert.equal((await h.wait('probe', ['--keep-open'])).code, 4);
+  assert.deepEqual(h.calls().map(call => call.agent), ['claude']);
+});
+
+test('escalation keeps a created task model after personal model settings change', async t => {
+  const h = harness(t, 'report-fail');
+  await h.run(['config', 'set', '--agents', 'codex', '--codex-model', 'original-model']);
+  assert.equal((await h.spawn()).code, 0);
+  assert.equal((await h.wait('probe', ['--keep-open'])).code, 4);
+  await h.run(['config', 'set', '--codex-model', 'next-task-model']);
+  h.ctx.headlessEnv.FAKE_MODE = 'done';
+  const result = await h.run(['escalate', 'probe', '--from', h.meta().dispatches[0].dispatchId]);
+  assert.equal(result.code, 0, JSON.stringify(result.last));
+  assert.equal((await h.wait()).code, 0);
+  const last = h.calls().at(-1);
+  assert.equal(last.args[last.args.indexOf('-m') + 1], 'original-model');
+});
+
 test('quota retry cannot consume the previous attempt report',async t=>{
   const h=harness(t,'stale-quota');assert.equal((await h.spawn()).code,0);const result=await h.wait('probe',['--keep-open']);assert.equal(result.code,5,JSON.stringify(result.last));
 });

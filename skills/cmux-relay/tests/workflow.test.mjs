@@ -45,6 +45,26 @@ test('workflow stops failed review, does not spawn or execute next stage', async
   assert.equal(await run(['advance', 'demo'], f.ctx), 4); assert.equal(f.state().status, 'failed'); assert.equal(f.calls.length, 3); assert.equal(f.checks.length, 0);
 });
 
+test('single-provider workflow uses a separate same-provider review and records its mode', async t => {
+  for (const agent of ['claude', 'codex']) {
+    const f = fixture(t);
+    fs.writeFileSync(path.join(f.home, 'config.json'), JSON.stringify({ version: 1, allowedAgents: [agent] }));
+    await f.start();
+    await run(['advance', 'demo'], f.ctx);
+    const metaPath = path.join(f.home, 'tasks/demo-work/meta.json');
+    const meta = JSON.parse(fs.readFileSync(metaPath)); meta.agent = agent; meta.dispatches[0].agent = agent;
+    fs.writeFileSync(metaPath, JSON.stringify(meta));
+    await run(['advance', 'demo'], f.ctx);
+    const review = f.calls[2];
+    assert.equal(review.includes('cross-check'), false);
+    assert.equal(review[review.indexOf('--kind') + 1], 'review');
+    assert.equal(f.state().reviewMode, 'same-provider');
+    assert.equal(f.state().stages[2].reviewMode, 'same-provider');
+    assert.match(fs.readFileSync(path.join(f.home, 'workflows/demo/review.md'), 'utf8'), /same-provider/i);
+    assert.equal(await run(['advance', 'demo'], f.ctx), 3);
+  }
+});
+
 test('failed verification stops at first failed check and never claims verified', async t => {
   const f = fixture(t, 1); await f.start(); for (let n = 0; n < 3; n++) await run(['advance', 'demo'], f.ctx);
   await run(['approve', 'demo', '--command', 'first', '--command', 'second', '--approval', 'Approved both'], f.ctx);

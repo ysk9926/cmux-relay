@@ -19,7 +19,7 @@ ln -s ~/.agents/skills/cmux-relay ~/.codex/skills/cmux-relay
 node ~/.agents/skills/cmux-relay/scripts/relay.mjs --help
 ```
 
-Node.js 24, 로그인된 공식 `claude`·`codex` CLI가 필요합니다. cmux 실행기는 macOS + cmux 훅이 필요하며,
+Node.js 24와 사용할 공식 `claude` 또는 `codex` CLI 로그인이 필요합니다. 한쪽만 사용할 수 있고, 둘 다 활성화하면 한도 전환·교차 검토를 지원합니다. cmux 실행기는 macOS + cmux 훅이 필요하며,
 헤드리스는 cmux 없이 동작합니다. CLI 로그인은 공식 도구에서 수행합니다. OAuth 토큰을 추출하거나 전달하지 않습니다.
 헤드리스 자식에는 API 키·API base URL 환경변수를 전달하지 않습니다. 실제 로그인·구독·약관 적합성은 사용하는 계정과 CLI 설정에서 확인해야 합니다.
 
@@ -49,8 +49,24 @@ relay close parser
 
 ## 라우팅과 모델 전환
 
-설정 원본은 [routing.yaml](skills/cmux-relay/config/routing.yaml) 하나입니다.
-외부 패키지 없이 읽도록 **JSON 문법의 YAML 1.2**를 사용합니다. 일반 YAML 축약 문법은 받지 않습니다.
+배포 기본값은 [routing.yaml](skills/cmux-relay/config/routing.yaml), 개인 설정은 `~/.agent-relay/config.json`입니다(`RELAY_HOME`으로 변경 가능). 개인 설정은 스킬 업데이트 후에도 유지됩니다.
+스킬에 "앞으로 relay는 Codex만 사용하고 모델은 …로 설정해줘"라고 요청하면 내장 [설정 모드](skills/cmux-relay/references/configuration.md)를 사용합니다.
+
+```bash
+relay config show
+relay config set --agents codex --codex-model '<사용할 모델>'
+relay config set --agents claude --claude-model '<사용할 모델>'
+relay config set --agents claude,codex --default-agent codex --kind-agent design=claude
+relay config set --kind-agent work=codex --kind-agent design=codex
+relay config set --agents codex --dry-run
+relay config reset
+```
+
+`set`은 전달한 항목만 병합합니다. 허용 agent 안에서 명시적 `--agent` → 유형별 선호 → 개인 기본값 → 배포 후보 순으로 고릅니다. `--agent-rule`도 명시하면 그 제약을 지켜야 합니다.
+`defaultAgent`는 default/plan/work/review/verify, `kindAgents`는 개별 유형에 적용됩니다. 모델은 agent별 모든 등급 후보에 적용되며, 모델 이름·effort의 실제 지원 여부는 공식 CLI가 확인합니다.
+비활성 agent는 새 작업의 명시적 호출·한도 전환에서도 제외합니다. 생성된 작업의 후속 지시·승급은 기존 모델과 후보를 유지합니다. 설정은 새 작업과 이후 workflow 단계에 적용됩니다.
+
+배포 YAML은 외부 패키지 없이 읽도록 **JSON 문법의 YAML 1.2**를 사용합니다. 일반 YAML 축약 문법은 받지 않습니다.
 
 - `agentPolicy`: 사용자 지정 → 디자인 → 복잡한 로직 → 교차 검토 → 병렬 → 한도 → 기본 규칙.
 - `models/levels/tiers`: 모델과 E1~E4 effort, 판정 신호. 금액·재고·정산·권한·DB 스키마는 E4.
@@ -59,14 +75,14 @@ relay close parser
 
 사용자가 에이전트를 지정한 경우만 `--agent claude|codex`를 넘깁니다. `--agent`나 사용자 지정 `--effort`는 provider를 고정하여 자동 전환을 막습니다.
 자동 라우팅에는 `--kind`와 `--tier/--tier-reason`을 사용합니다.
-`--agent-rule cross-check --previous-agent codex`는 Claude만 허용합니다. 직전 에이전트 생략 시 현재 호스트가 기준입니다.
+`--agent-rule cross-check --previous-agent codex`는 활성화된 Claude만 허용합니다. 직전 에이전트 생략 시 현재 호스트가 기준이며, 다른 활성 agent가 없으면 실패합니다.
 
 공식 CLI 출력에서 확인된 **실패한 사용량 한도**만 다음 후보로 전환합니다. 일반 오류·HTTP 429·성공한 답변의 한도 언급은 재시도하지 않습니다.
 후보는 유한하며 각 후보를 한 번씩 시도합니다. 과거 한도 기록은 다음 라우팅에도 적용합니다. 교차 검토는 원래 제공사로 되돌아가지 않습니다.
 `relay route --quota`로 기록을 확인합니다. cooldown은 실제 제공사 reset 시각이나 잔여량 추정이 아닙니다.
 구독 비용·알 수 없는 토큰 수는 null로 남깁니다.
 
-이전 `agent-policy.json`·`effort-tiers.json`은 호환용 스냅샷이며 런타임은 읽지 않습니다. 설정 변경은 routing.yaml에서 합니다.
+이전 `agent-policy.json`·`effort-tiers.json`은 호환용 스냅샷이며 런타임은 읽지 않습니다. 개인 선호는 `relay config`로 변경합니다.
 
 ## 기본 작업 순서
 
@@ -77,7 +93,7 @@ relay workflow status parser-flow
 ```
 
 advance가 현재 단계를 기다리고, 성공하면 다음 단계를 시작합니다.
-plan → work → review → verify 순서이며 review는 한도 전환까지 반영한 **실제 work 제공사의 반대편**입니다.
+plan → work → review → verify 순서이며, 둘 다 활성화되어 있으면 review는 한도 전환까지 반영한 **실제 work 제공사의 반대편**입니다. 하나만 사용하면 같은 제공사의 별도 작업으로 검토하며 `reviewMode: same-provider`를 기록합니다.
 각 단계는 이전 보고서를 읽습니다. 실패·질문·잘못된 단계 보고에서는 진행을 멈춥니다.
 worktree는 work 단계에만 생성하며 review와 verify는 그 cwd를 이어받습니다.
 
@@ -132,6 +148,7 @@ close한 작업에는 send/escalate할 수 없습니다.
 
 ```text
 ~/.agent-relay/                  # RELAY_HOME으로 변경 가능
+  config.json                   # 개인 agent·모델·유형 선호 (스킬 업데이트와 분리)
   tasks/<task>/                 # brief, meta, report, 시도별 stdout/stderr, runner 상태
   workflows/<id>/workflow.json   # 단계 진행·승인·보고서 참조
   ownership/<task>.json          # 파일 담당 예약

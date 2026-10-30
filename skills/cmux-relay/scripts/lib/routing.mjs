@@ -3,12 +3,13 @@ import path from 'node:path';
 import { loadTiers, resolveEffort } from './effort.mjs';
 import { loadAgentPolicy, checkAgentRule } from './agent-policy.mjs';
 import { RelayError } from './errors.mjs';
+import { readConfig, applyConfig } from './config.mjs';
 
 const agents = ['claude', 'codex'];
 const kinds = ['default', 'design', 'complex-logic', 'cross-check', 'quota', 'plan', 'work', 'review', 'verify'];
 const invalid = (message) => { throw new RelayError('ROUTING_INVALID', message); };
 
-export function readRouting(skillDir) {
+export function readRouting(skillDir, { home } = {}) {
   let c;
   try { c = JSON.parse(fs.readFileSync(path.join(skillDir, 'config', 'routing.yaml'), 'utf8')); }
   catch { invalid('routing.yaml must exist and contain JSON syntax YAML'); }
@@ -27,7 +28,7 @@ export function readRouting(skillDir) {
 
     }
   }
-  return c;
+  return home ? applyConfig(c, readConfig(home)) : c;
 }
 
 const milliseconds = now => now instanceof Date ? now.getTime() : typeof now === 'number' ? now : Date.parse(now ?? new Date().toISOString());
@@ -65,6 +66,7 @@ export function recordQuota(home, { agent, model = null, taskId = null, dispatch
 
 export function resolveRoute(c, { agent, tier, tierReason, effort, rule, host, previousAgent, kind = 'default', home, now }) {
   if (agent !== undefined && !agents.includes(agent)) throw new RelayError('AGENT_INVALID', `unknown agent ${agent}`);
+  if (agent && c.preferences && !c.preferences.allowedAgents.includes(agent)) throw new RelayError('AGENT_DISABLED', `${agent} is disabled; enable it with relay config set --agents claude,codex`);
   if (!kinds.includes(kind)) throw new RelayError('ROUTE_KIND_INVALID', `unknown route kind ${kind}`);
   const routeKind = ['design','complex-logic','cross-check','quota'].includes(rule) ? rule : kind;
   const agentRule = rule ?? (['design','complex-logic','cross-check','quota'].includes(routeKind) ? routeKind : 'default');
@@ -76,14 +78,16 @@ export function resolveRoute(c, { agent, tier, tierReason, effort, rule, host, p
   if (policy.agent === 'other' && !reference) throw new RelayError('HOST_REQUIRED', `rule ${agentRule} needs host or previousAgent`);
   // Validate the tier before looking up a chain, and the effort on its actual provider.
   if (tier && !c.tiers.some(t => t.id === tier)) throw new RelayError('UNKNOWN_TIER', `unknown tier ${tier}`);
-  const chain = tier ? c.chains[routeKind]?.[tier] : [{ agent: agent ?? (policy.agent === 'other' ? agents.find(a => a !== reference) : ['claude','codex'].includes(policy.agent) ? policy.agent : c.agentPolicy.default), effort }].map(x => ({ ...x, model: c.models[x.agent] }));
+  const chain = tier ? c.chains[routeKind]?.[tier] : [{ agent: agent ?? (policy.agent === 'other' ? agents.find(a => a !== reference) : c.chains[routeKind][c.tiers[0].id][0].agent), effort }].map(x => ({ ...x, model: c.models[x.agent] }));
   let choices = chain;
+  if (c.preferences) choices = choices.filter(x => c.preferences.allowedAgents.includes(x.agent));
   if (policy.agent === 'other') choices = choices.filter(x => x.agent !== reference);
   if (agent) {
-    checkAgentRule(c.agentPolicy, { rule: agentRule === 'default' ? null : agentRule, agent, host, previousAgent });
+    checkAgentRule(c.agentPolicy, { rule: agentRule === 'default' ? null : rule ?? (policy.agent === 'other' ? agentRule : null), agent, host, previousAgent });
     choices = [{ agent, model: c.models[agent], effort: effort ?? c.tiers.find(t => t.id === tier)?.effort[agent] }];
   }
   if (effort) choices = choices.slice(0, 1);
+  if (!choices.length) throw new RelayError('NO_ROUTE_AVAILABLE', `no enabled agent satisfies ${agentRule}; check relay config show`);
   resolveEffort(c, { agent: choices[0]?.agent ?? agent ?? c.agentPolicy.default, tier, tierReason, effort });
   const blocked = quotaState(home, { now, cooldownSeconds: c.quota.cooldownSeconds });
   if (!pinned) choices = choices.filter(x => !blocked[x.agent]);
