@@ -1,0 +1,2 @@
+# 웹 조작용 Codex CLI 프로필: codex exec --profile browser
+model = "gpt-6.1-terra"

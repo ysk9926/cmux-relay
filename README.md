@@ -84,6 +84,12 @@ relay config reset
 
 이전 `agent-policy.json`·`effort-tiers.json`은 호환용 스냅샷이며 런타임은 읽지 않습니다. 개인 선호는 `relay config`로 변경합니다.
 
+## 웹 조작 설정
+
+사용자 화면 확인은 Aside, 관찰이 필요 없는 작업은 ego lite를 우선하고, 사용 가능한 다른 쪽 → Chrome 확장 브라우저 → Computer Use 순으로 대체합니다. 웹 조작은 Codex `gpt-6.1-terra`로 실행합니다.
+
+공통 정책, 개인 Codex 에이전트·CLI 프로필, 전역 지침 적용 방법은 [웹 조작 설정](docs/browser/README.md)에 있습니다.
+
 ## 기본 작업 순서
 
 ```bash
