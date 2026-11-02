@@ -17,8 +17,9 @@ import * as listCmd from './commands/list.mjs';
 import * as workflowCmd from './commands/workflow.mjs';
 import * as routeCmd from './commands/route.mjs';
 import * as configCmd from './commands/config.mjs';
+import * as gcCmd from './commands/gc.mjs';
 
-const COMMANDS = { config: configCmd, workflow: workflowCmd, route: routeCmd, spawn: spawnCmd, wait: waitCmd, send: sendCmd, escalate: escalateCmd, status: statusCmd, close: closeCmd, list: listCmd };
+const COMMANDS = { gc: gcCmd, config: configCmd, workflow: workflowCmd, route: routeCmd, spawn: spawnCmd, wait: waitCmd, send: sendCmd, escalate: escalateCmd, status: statusCmd, close: closeCmd, list: listCmd };
 
 export const HELP = `relay <command> [options] — 공식 CLI 자식을 cmux·헤드리스로 실행하고 보고를 돌려받는다
   config    개인 agent·모델·작업 유형 설정 조회·저장·초기화
@@ -30,6 +31,7 @@ export const HELP = `relay <command> [options] — 공식 CLI 자식을 cmux·�
   escalate  자동 판정 지시가 실패하면 한 등급 위로 1회 fork 재시도
   status    탭·지시 이력·화면 마지막 40줄
   close     작업의 탭 닫기 (작업 폴더 보존)
+  gc        완료·닫힌 작업의 남은 worktree 회수 (--dry-run 지원)
   list      작업 목록
 각 명령의 --help 를 참고. 오류는 종료코드 2 와 {error, message} JSON.`;
 

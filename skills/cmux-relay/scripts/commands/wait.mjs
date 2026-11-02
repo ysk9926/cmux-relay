@@ -1,4 +1,5 @@
 import { readHeadless } from '../lib/headless.mjs';
+import { taskOperation } from '../lib/task-lock.mjs';
 import { cmuxQuotaFallback } from '../lib/fallback.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -42,9 +43,21 @@ export async function run(argv, ctx) {
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new RelayError('USAGE', '--timeout must be a positive number of seconds');
   const meta = readMeta(ctx.home, taskId);
   const d = findDispatch(meta, v.dispatch);
-  // 끝난 지시를 다시 기다리면 판정이 124 로 덮어써진다. 5·124·6 만 다시 기다릴 수 있다.
+  // Persist the retention choice before polling, so an unattended GC cannot
+  // reclaim a task while its caller is waiting with --keep-open.
+  if ([3, 4].includes(d.exitCode)) throw new RelayError('DISPATCH_FINISHED', `dispatch ${d.dispatchId} already finished with exit code ${d.exitCode}`);
+  if (!v['dry-run'] && (v['keep-open'] || d.exitCode === 0)) await taskOperation(ctx, taskId, async () => {
+    const fresh = readMeta(ctx.home, taskId);
+    if (!fresh.closedAt && fresh.dispatches.at(-1)?.dispatchId === d.dispatchId) {
+      fresh.keepOpen = v['keep-open'];
+      writeMeta(ctx.home, taskId, fresh);
+    }
+  });
+  // Cached verdicts never become timeouts; successful waits can retry cleanup.
   if ([0, 3, 4].includes(d.exitCode)) {
-    throw new RelayError('DISPATCH_FINISHED', `dispatch ${d.dispatchId} already finished with exit code ${d.exitCode}`);
+    const cleanup = !v['dry-run'] && d.exitCode === 0 && !v['keep-open'] ? await cleanupFinished(ctx, taskId, d.dispatchId) : null;
+    ctx.out({ exitCode: d.exitCode, reason: d.verdictReason, dispatchId: d.dispatchId, report: d.report ?? null, cached: true, cleanup, ...(v['dry-run'] ? { dryRun: true } : {}) });
+    return d.exitCode;
   }
   const tab = findTab(meta, d.tab);
   const rp = path.join(taskDir(ctx.home, taskId), reportFileName(d.dispatchId));
@@ -150,6 +163,7 @@ async function finish(ctx, taskId, meta, tab, d, verdict, { keepOpen }) {
     resumeSeq: verdict.seq ?? fd.resumeSeq,
     waitCount: (fd.waitCount ?? 0) + 1,
   });
+  if (fresh.dispatches.at(-1)?.dispatchId === d.dispatchId) fresh.keepOpen = keepOpen;
   writeMeta(ctx.home, taskId, fresh);
   if (verdict.exitCode !== 6) appendEffortLog(ctx.home, buildEffortLogEntry({ taskId, agent: meta.agent, dispatch: fd }));
   // 완료 보고가 오면 탭을 정리한다. 닫기에 실패해도 판정(0)은 바꾸지 않고 cleanup.failed 로 알린다.
@@ -202,6 +216,7 @@ async function waitHeadless(ctx, taskId, meta, tab, d, readReport, timeoutMs, { 
   fresh.agent = fd.agent;
   const ft = findTab(fresh, d.tab);
   ft.sessionId = state?.sessionId ?? null; ft.agent = fd.agent;
+  if (fresh.dispatches.at(-1)?.dispatchId === d.dispatchId) fresh.keepOpen = keepOpen;
   writeMeta(ctx.home, taskId, fresh);
   appendEffortLog(ctx.home, buildEffortLogEntry({ taskId, agent: fd.agent, dispatch: fd }));
   const cleanup = verdict.exitCode === 0 && !keepOpen && fresh.dispatches.at(-1)?.dispatchId === d.dispatchId ? await cleanupFinished(ctx, taskId, d.dispatchId) : null;

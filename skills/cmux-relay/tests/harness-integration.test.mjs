@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { runRelay, fakeUserHome, fakeCmux, tmp } from './helpers.mjs';
 import { readHeadless } from '../scripts/lib/headless.mjs';
 
@@ -79,6 +80,28 @@ test('workflow runs plan work review then requires approval before executing ver
   const approved=await h.run(['workflow','approve','flow','--command',command,'--approval','User explicitly approves the fixture command']);assert.equal(approved.code,3);assert.equal(fs.existsSync(marker),false);
   const complete=await h.run(['workflow','advance','flow']);assert.equal(complete.code,0,JSON.stringify(complete.last));assert.equal(complete.last.status,'done');assert.equal(fs.readFileSync(marker,'utf8'),'passed');
   const receipts=JSON.parse(fs.readFileSync(path.join(h.home,'tasks/flow-verify/verification/receipts.json')));assert.equal(receipts[0].executed,true);assert.equal(receipts[0].approved,true);
+});
+
+test('real Git workflow keeps worktree for review and verification, then reclaims it after dependents close', async t => {
+  const h = harness(t), repo = path.join(h.base, 'source'); fs.mkdirSync(repo);
+  const git = args => execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  git(['init', repo]); fs.writeFileSync(path.join(repo, 'tracked.txt'), 'fixture');
+  git(['-C', repo, 'add', '.']); git(['-C', repo, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'init']);
+  h.ctx.runGit = git;
+  const start = await h.run(['workflow', 'start', '--task', 'gitflow', '--brief', path.join(h.base, 'brief.md'), '--tier', 'E1', '--tier-reason', 'worktree regression', '--cwd', repo, '--worktree']);
+  assert.equal(start.code, 0, JSON.stringify(start.last));
+  const wt = path.join(h.home, 'worktrees/gitflow-work');
+  for (const stage of ['work', 'review', 'verify']) {
+    const result = await h.run(['workflow', 'advance', 'gitflow', '--timeout', '8']);
+    assert.equal(result.last.stage, stage, JSON.stringify(result.last));
+    assert.ok(fs.existsSync(wt), `checkout must survive ${stage}`);
+  }
+  await h.run(['workflow', 'approve', 'gitflow', '--command', 'test -f tracked.txt', '--approval', 'User approves fixture file check']);
+  const result = await h.run(['workflow', 'advance', 'gitflow']);
+  assert.equal(result.code, 0, JSON.stringify(result.last));
+  assert.ok(result.last.cleanup.every(entry => entry.failed.length === 0), JSON.stringify(result.last.cleanup));
+  assert.equal(fs.existsSync(wt), false);
+  assert.ok(git(['-C', repo, 'branch', '--list', 'relay/gitflow-work']).includes('relay/gitflow-work'));
 });
 
 test('personal single-provider workflows launch only the selected CLI and model in every model stage', async t => {

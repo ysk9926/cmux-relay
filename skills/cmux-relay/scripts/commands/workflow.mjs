@@ -157,8 +157,8 @@ export async function run(argv, ctx) {
 
 async function cleanupWorkflow(state, ctx) {
   state.cleanup = [];
-  for (const entry of state.stages) {
-    try { state.cleanup.push({ taskId: entry.taskId, ...await closeTabs(ctx, entry.taskId) }); }
+  for (const entry of [...state.stages].reverse()) {
+    try { state.cleanup.push({ taskId: entry.taskId, ...await closeTabs(ctx, entry.taskId, null, { workflowId: state.id }) }); }
     catch (error) { state.cleanup.push({ taskId: entry.taskId, failed: [{ error: error.message }] }); }
   }
 }

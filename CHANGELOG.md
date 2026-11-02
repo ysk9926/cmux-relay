@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-02 — reclaim completed worktrees
+
+- Add `relay gc [--dry-run]` and a pre-spawn sweep for completed/closed managed checkouts, including legacy records missing the worktree flag. Keep branches, reports and session logs; remove ignored dependencies with the checkout using Git without force.
+- Reclaim successful unattended headless work after 24 hours on the next spawn/GC, requiring an exited runner and a valid done report. Persist `wait --keep-open` and preserve legacy open tasks with unknown retention intent.
+- Protect live runners, dirty trees, dependent tasks, unfinished workflows and commits without a branch/tag. Close workflow consumers before their shared worktree owner.
+- Serialize cwd registration and removal with a shared worktree registry lock; register dependencies before launch and keep the task locked until launch metadata is persisted.
+- Roll back clean worktrees on pre-launch failures, retain worktree identity in provisional metadata, and retry cleanup on cached successful waits.
+- Cover recovery, dry-run, ignored dependencies, commit preservation, retention and a real-Git/fake-CLI workflow with regression tests.
+
 ## 2026-10-30 — personal agent and model settings
 
 - Add `relay config show|set|reset` with dry-run, validated/atomic private settings in `RELAY_HOME/config.json`, enabled providers, default/per-kind preferences and provider model overrides.

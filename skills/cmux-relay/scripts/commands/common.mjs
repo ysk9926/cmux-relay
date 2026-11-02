@@ -8,6 +8,8 @@ import { extractClaudeSettings, extractCodexConfig } from '../lib/settings-guard
 import { RelayError } from '../lib/errors.mjs';
 import { callerOf } from '../lib/launch.mjs';
 import { listTasks, readMeta, writeMeta } from '../lib/store.mjs';
+import { collectionReason, removeManagedWorktree } from '../lib/worktrees.mjs';
+import { withWorktreeRegistry } from '../lib/worktree-lock.mjs';
 
 export const CLAUDE_SETTINGS = '~/.claude/settings.json';
 export const CODEX_CONFIG = '~/.codex/config.toml';
@@ -158,10 +160,11 @@ export function childPlan(ctx, { placement, name, cwd, env, command }) {
 }
 
 // 열린 실행기를 닫고 관리 중인 깨끗한 worktree를 제거한다. 기록과 브랜치는 보존한다.
-export async function closeTabs(ctx, taskId, forDispatch = null) {
-  return taskOperation(ctx, taskId, async () => {
+export async function closeTabs(ctx, taskId, forDispatch = null, options = {}) {
+  return withWorktreeRegistry(ctx, () => taskOperation(ctx, taskId, async () => {
   const meta = readMeta(ctx.home, taskId);
   if (forDispatch && meta.dispatches.at(-1)?.dispatchId !== forDispatch) return { closed: [], failed: [], skipped: 'newer-dispatch' };
+  if (options.collect && !collectionReason(ctx, taskId, meta)) return { closed: [], failed: [], skipped: 'not-eligible' };
   const closed = [];
   const failed = [];
   for (const tab of meta.tabs) {
@@ -188,23 +191,12 @@ export async function closeTabs(ctx, taskId, forDispatch = null) {
     releaseOwnership(ctx.home, taskId);
   }
   let worktree;
-  if (meta.worktree && meta.tabs.every(t => t.closed)) {
-    const root = path.resolve(ctx.home, 'worktrees', taskId);
-    try {
-      if (fs.existsSync(root)) {
-        const top = ctx.runGit(['-C', root, 'rev-parse', '--show-toplevel']).trim();
-        if (fs.realpathSync(top) !== fs.realpathSync(root)) throw new Error('managed worktree root mismatch');
-        // No --force: Git protects untracked files, modified files and submodules.
-        ctx.runGit(['-C', root, 'worktree', 'remove', root]);
-      }
-      worktree = { path: root, status: 'removed' };
-    } catch (error) {
-      worktree = { path: root, status: 'retained', reason: String(error.stderr || error.message).trim() };
-      failed.push({ path: root, error: worktree.reason });
-    }
-    meta.worktreeCleanup = worktree;
+  if (meta.tabs.every(t => t.closed)) {
+    worktree = removeManagedWorktree(ctx, taskId, meta, options);
+    if (worktree?.status === 'retained') failed.push({ path: worktree.path, error: worktree.reason });
+    if (worktree) meta.worktreeCleanup = worktree;
   }
   writeMeta(ctx.home, taskId, meta);
   return { closed, failed, ...(worktree ? { worktree } : {}) };
-  });
+  }));
 }

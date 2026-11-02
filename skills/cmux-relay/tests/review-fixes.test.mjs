@@ -23,15 +23,26 @@ function logLines(ctx) {
   return fs.readFileSync(path.join(ctx.home, 'effort-log.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
 }
 
-test('리뷰 I1: 끝난 지시(0·3·4)를 다시 wait 하면 거부하고 meta 를 바꾸지 않는다', async () => {
+test('리뷰 I1: 성공한 지시를 다시 wait 하면 판정을 재사용하고 cleanup 을 재시도한다', async () => {
   const { ctx, d1 } = await spawned();
   const meta = readMeta(ctx.home, 't');
   Object.assign(meta.dispatches[0], { exitCode: 0, verdictReason: 'done' });
   writeMeta(ctx.home, 't', meta);
   const r = await runRelay(['wait', 't', '--dispatch', d1, '--timeout', '5'], ctx);
-  assert.deepEqual([r.code, r.last.error], [2, 'DISPATCH_FINISHED']);
+  assert.deepEqual([r.code, r.last.cached], [0, true]);
   assert.equal(readMeta(ctx.home, 't').dispatches[0].exitCode, 0);
   assert.equal(ctx.cmux.streams.length, 0);
+});
+
+test('리뷰 I1: 질문·실패 판정은 재대기하지 않고 metadata 를 보존한다', async () => {
+  for (const code of [3, 4]) {
+    const { ctx, d1 } = await spawned();
+    const meta = readMeta(ctx.home, 't'); meta.dispatches[0].exitCode = code;
+    writeMeta(ctx.home, 't', meta);
+    const result = await runRelay(['wait', 't', '--dispatch', d1], ctx);
+    assert.deepEqual([result.code, result.last.error], [2, 'DISPATCH_FINISHED']);
+    assert.deepEqual(readMeta(ctx.home, 't'), meta);
+  }
 });
 
 test('리뷰 I1: 124 뒤 같은 지시를 다시 wait 해서 0 이면 로그 두 줄에 wait 회차가 남는다', async () => {

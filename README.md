@@ -150,6 +150,12 @@ headless `applied`는 플래그만 확인하므로 unverified입니다. cmux는 
 자동 등급 실패는 `relay escalate TASK --from DISPATCH --host HOST`로 effort 한 단계, 한 번만 승급할 수 있습니다.
 close한 작업에는 send/escalate할 수 없습니다.
 
+완료 뒤 남은 worktree는 `relay gc --dry-run`으로 확인하고 `relay gc`로 회수할 수 있습니다. 새 `spawn` 전에도 자동 회수하며 결과를 `garbageCollection`에 출력합니다. 닫힌 구버전 작업과 정리 실패 항목도 재검사합니다. 성공한 지시의 `wait`를 다시 실행하면 기존 판정을 반환하고 정리를 재시도합니다.
+
+`wait` 없이 성공 종료한 새 headless 작업은 실행 종료와 유효한 완료 보고서가 모두 확인되고 24시간이 지난 뒤, 다음 `spawn` 또는 `gc`에서 회수합니다. `--keep-open`은 metadata에 저장해 자동 회수에서 제외합니다. 구버전의 열린 작업은 보존 의사를 확인할 수 없으므로 자동 회수하지 않습니다. 이 경우 검토 후 `close TASK`를 사용합니다.
+
+회수는 강제 옵션 없이 `git worktree remove`를 사용합니다. 무시된 `node_modules`·빌드 결과물도 checkout과 함께 제거합니다. 미저장 변경·추적되지 않은 파일, 실행 중인 headless 작업, 다른 작업·미완료 workflow가 사용하는 checkout, 브랜치·태그로 보존되지 않은 커밋은 남깁니다. 커밋된 결과는 `relay/<task>` 브랜치에서 확인할 수 있으며 작업 기록·보고서는 보존합니다. 시작 실패로 생긴 깨끗한 worktree도 정리하고, 발견 실패 시에는 복구용 worktree 정보를 남깁니다.
+
 ## 저장소·이어받기·복구
 
 ```text
@@ -160,15 +166,15 @@ close한 작업에는 send/escalate할 수 없습니다.
   ownership/<task>.json          # 파일 담당 예약
   quota-events.jsonl            # 실제 한도 신호
   effort-log.jsonl              # 모델·호스트·시간·결과·전환 기록
-  worktrees/<task>/             # 완료 시 제거되는 작업 체크아웃 (미저장 변경은 보존)
+  worktrees/<task>/             # 완료 시 제거, 누락분은 다음 spawn/gc에서 회수 (미저장 변경 보존)
 ```
 
 `--host` → `RELAY_HOST` → CLI 환경표식 순서로 호스트를 판별합니다. 두 표식이 함께 있으면 명시해야 합니다.
 최초 호스트와 지시별 호스트를 각각 기록하므로 한쪽 한도가 차면 다른 CLI에서 list/status로 찾아 이어갑니다.
 Claude Code는 wait를 백그라운드 Bash에 걸고, Codex는 실행 도구가 반환한 세션을 이어 기다립니다.
 
-알려진 자식 창은 탐색 실패 시에도 metadata에 보존합니다. headless close는 실행기 신원을 확인하고 프로세스 그룹 종료를 기다립니다.
-실행기 종료 실패는 ownership을 유지합니다. worktree 제거 실패는 `cleanup.failed`에 남기며 `close`로 재시도합니다. 워크플로는 검증 성공 후 정리하고 결과를 `workflow.cleanup`에 남깁니다. 비정상 종료로 워크플로 `.lock`, 작업 `.operation.lock` 또는 `ownership.lock`이 남으면 상태·PID·자식을 확인한 뒤 정리해야 합니다.
+알려진 자식 창은 탐색 실패 시에도 metadata에 보존합니다. headless close는 실행기 신원을 확인하고 프로세스 그룹 종료를 기다립니다. 작업 cwd 등록과 worktree 제거는 공용 `worktree.lock`으로 직렬화하고, 실행기 시작 중에는 작업 잠금으로 동시 close를 막습니다.
+실행기 종료 실패는 ownership을 유지합니다. worktree 제거 실패는 `cleanup.failed`에 남기며 `close`로 재시도합니다. 워크플로는 검증 성공 후 정리하고 결과를 `workflow.cleanup`에 남깁니다. 비정상 종료로 워크플로 `.lock`, 작업 `.operation.lock`, `ownership.lock` 또는 `worktree.lock`이 남으면 상태·PID·자식을 확인한 뒤 정리해야 합니다.
 검증 중 강제 종료는 부수효과가 있을 수 있어 자동 재실행하지 않습니다. 영수증과 실제 상태를 먼저 확인합니다.
 
 ## 검증

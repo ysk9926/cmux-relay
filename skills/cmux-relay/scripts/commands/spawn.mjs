@@ -6,6 +6,10 @@ import { resolveHost } from '../lib/host.mjs';
 import { readRouting, resolveRoute } from '../lib/routing.mjs';
 import { withOwnership } from '../lib/ownership.mjs';
 import { startHeadless } from '../lib/headless.mjs';
+import { removeManagedWorktree } from '../lib/worktrees.mjs';
+import { collectWorktrees } from './gc.mjs';
+import { acquireWorktreeRegistry, withWorktreeRegistry } from '../lib/worktree-lock.mjs';
+import { taskOperation } from '../lib/task-lock.mjs';
 import { checkPreset, checkPlacement, claudeArgs, codexArgs, toCommand, launchFileName, launchScript, sourceCommand, callerOf } from '../lib/launch.mjs';
 import { newDispatchId, startPrompt } from '../lib/dispatch.mjs';
 import { validateTaskId, taskDir, createTask, writeFile600, writeMeta } from '../lib/store.mjs';
@@ -72,9 +76,15 @@ async function spawnTask(argv, ctx) {
   const dir = taskDir(ctx.home, v.task);
   // git·cmux 부수효과보다 먼저 확인한다(같은 ID 재실행 때 worktree 를 만들지 않도록).
   if (fs.existsSync(dir)) throw new RelayError('TASK_EXISTS', `task already exists: ${v.task}`);
+  const requestedCwd = path.resolve(v.cwd ?? process.cwd());
+  const garbageCollection = dry ? [] : await collectWorktrees(ctx, { cwd: fs.existsSync(requestedCwd) ? fs.realpathSync(requestedCwd) : requestedCwd });
   return withOwnership(ctx, { taskId: v.task, cwd: path.resolve(v.cwd ?? process.cwd()), owns: v.owns ?? [], dryRun: dry }, async () => {
-  const plan = [];
+  const releaseRegistry = dry ? () => {} : await acquireWorktreeRegistry(ctx);
+  let madeWorktree = false;
+  let registered = false;
   let cwd = path.resolve(v.cwd ?? process.cwd());
+  try {
+  const plan = [];
   if (v.worktree) {
     const wt = path.join(ctx.home, 'worktrees', v.task);
     let relativeCwd = '';
@@ -88,6 +98,7 @@ async function spawnTask(argv, ctx) {
     else {
       try {
         ctx.runGit(gitArgs);
+        madeWorktree = true;
       } catch (e) {
         throw new RelayError('WORKTREE_FAILED', String(e.stderr || e.message).trim().split('\n')[0]);
       }
@@ -115,6 +126,12 @@ async function spawnTask(argv, ctx) {
   }
 
   createTask(ctx.home, v.task);
+  // Register cwd before any child can launch, while deletion is excluded. A
+  // crashed startup remains discoverable and can be recovered with close.
+  writeMeta(ctx.home, v.task, { version: 2, taskId: v.task, cwd, worktree: v.worktree, keepOpen: false, launchPending: true, tabs: [], dispatches: [] });
+  registered = true;
+  return await taskOperation(ctx, v.task, async () => {
+  releaseRegistry();
   let settingsBefore;
   let seq;
   let startedAt;
@@ -130,26 +147,36 @@ async function spawnTask(argv, ctx) {
       ? (ctx.startHeadless ?? startHeadless)(ctx, { taskId: v.task, dispatchId, dir, home: ctx.home, cwd, preset: v.preset, candidates: r.candidates, prompt, pinned: r.pinned, host })
       : createChild(ctx, child);
   } catch (e) {
-    // 탭이 생기기 전 실패는 방금 만든 작업 폴더를 지워 같은 ID 를 다시 쓸 수 있게 한다.
-    fs.rmSync(dir, { recursive: true, force: true });
+    // Roll back pre-launch worktrees too; preserve dirty output and a recoverable
+    // record if Git refuses removal. Branches are deliberately retained.
+    const cleanup = v.worktree ? await withWorktreeRegistry(ctx, () => removeManagedWorktree(ctx, v.task, { worktree: true, cwd })) : null;
+    if (cleanup?.status === 'retained') {
+      writeMeta(ctx.home, v.task, { taskId: v.task, worktree: true, cwd, tabs: [], dispatches: [], closedAt: ctx.now().toISOString(), worktreeCleanup: cleanup });
+    } else fs.rmSync(dir, { recursive: true, force: true });
     throw e;
   }
   let tab, sess;
   // A launched child must remain discoverable and keep its reservation even if cmux discovery fails.
   try {
-    writeMeta(ctx.home, v.task, { version: 2, taskId: v.task, host, backend: v.backend, agent, cwd, owns: v.owns ?? [], placement: v.placement, preset: v.preset, tabs: [{ ...created, dispatchId, observe: v.backend === 'headless' ? 'headless' : 'hook' }], dispatches: [dispatchRecord({ dispatchId, kind: 'start', host, agent, tab: created.name, startedAt, seq, ...pickRequested(r), prompt })] });
+    writeMeta(ctx.home, v.task, { version: 2, taskId: v.task, host, backend: v.backend, agent, cwd, worktree: v.worktree, keepOpen: false, scopeRoot: path.resolve(v.cwd ?? process.cwd()), owns: v.owns ?? [], placement: v.placement, preset: v.preset, tabs: [{ ...created, dispatchId, observe: v.backend === 'headless' ? 'headless' : 'hook' }], dispatches: [dispatchRecord({ dispatchId, kind: 'start', host, agent, tab: created.name, startedAt, seq, ...pickRequested(r), prompt })] });
     tab = v.backend === 'headless' ? created : await locateChild(ctx, created);
     sess = v.backend === 'headless' ? null : await poll(ctx, () => ctx.cmux.sessions(tab, agent)[0]);
   } catch (error) { error.retainOwnership = true; throw error; }
 
   const meta = {
-    version: 2, host, backend: v.backend, stage: v.stage, owns: v.owns ?? [], scopeRoot: path.resolve(v.cwd ?? process.cwd()), kind: v.kind, taskId: v.task, agent, cwd, worktree: v.worktree, preset: v.preset, placement: v.placement,
+    version: 2, host, backend: v.backend, stage: v.stage, owns: v.owns ?? [], scopeRoot: path.resolve(v.cwd ?? process.cwd()), kind: v.kind, taskId: v.task, agent, cwd, worktree: v.worktree, keepOpen: false, preset: v.preset, placement: v.placement,
     parent: callerOf(ctx.env ?? {}), createdAt: startedAt,
     tabs: [{ ...tab, sessionId: sess?.session_id ?? null, transcriptPath: sess?.transcript_path ?? null, observe: v.backend === 'headless' ? 'headless' : 'hook', dispatchId, agent }],
     dispatches: [dispatchRecord({ dispatchId, kind: 'start', host, backend: v.backend, stage: v.stage, agent, candidates: r.candidates, candidateIndex: 0, pinned: r.pinned, prompt, tab: tab.name, startedAt, seq, ...pickRequested(r), reason: r.reason, agentRule, command, launchFile, settingsBefore })],
   };
   try { writeMeta(ctx.home, v.task, meta); } catch (error) { error.retainOwnership = true; throw error; }
-  ctx.out({ host, taskId: v.task, dispatchId, backend: v.backend, candidates: r.candidates, pinned: r.pinned, placement: v.placement, ref: tab.ref, uuid: tab.uuid, surface: tab.surface ?? null, sessionId: meta.tabs[0].sessionId, requested: pickRequested(r), agentRule, warnings: v.backend === 'headless' || sess ? [] : ['session-not-found'] });
+  ctx.out({ host, taskId: v.task, dispatchId, backend: v.backend, candidates: r.candidates, pinned: r.pinned, placement: v.placement, ref: tab.ref, uuid: tab.uuid, surface: tab.surface ?? null, sessionId: meta.tabs[0].sessionId, requested: pickRequested(r), agentRule, warnings: v.backend === 'headless' || sess ? [] : ['session-not-found'], garbageCollection });
   return 0;
+  });
+  } catch (error) {
+    // Failure to create/register the task must not strand a clean checkout.
+    if (madeWorktree && !registered) removeManagedWorktree(ctx, v.task, { worktree: true, cwd });
+    throw error;
+  } finally { releaseRegistry(); }
   });
 }

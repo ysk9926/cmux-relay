@@ -76,6 +76,8 @@ relay spawn --host codex --backend headless --kind work --stage work --task fix-
   실행 중인 headless에는 send/escalate하지 않는다. `/model`·`/effort` 등 슬래시 명령은 보내지 않는다.
 - 승급: `relay escalate <task> --host codex --from <dispatch>` (모델 변경이 아닌 effort 한 단계 승급).
 - 정리: `relay close <task>`; 닫힌 작업은 send/escalate 불가. 새 작업으로 시작한다.
+- 누적 회수: `relay gc --dry-run`으로 남은 관리 worktree를 확인하고 `relay gc`로 정리한다. 새 spawn 전에도 자동 실행하며 `garbageCollection`에 결과를 남긴다. 작업 기록·브랜치는 보존한다. 성공한 wait를 다시 실행하면 판정을 재사용하고 정리를 재시도한다.
+- 새 headless 작업이 wait 없이 성공 종료하면, 실행 종료·유효한 완료 보고서를 확인하고 24시간 뒤 다음 spawn/gc에서 회수한다. `wait --keep-open`은 보존 의사를 저장한다. 구버전의 열린 작업, 실행 중, 미저장 변경, 다른 작업·미완료 workflow가 사용하는 checkout, 브랜치·태그 없는 커밋은 자동 삭제하지 않는다. 구버전 열린 작업은 검토 후 close한다.
 
 ## 4. 기본 작업 순서
 
@@ -108,6 +110,6 @@ verified는 승인·실제 실행·성공 영수증이 있어야 하며 자식 �
 - 호스트가 바뀌면 다음 send/escalate/workflow advance에 현재 host를 넘긴다. 최초 host와 지시별 host는 각각 보존한다.
 - Codex 샌드박스에서 cwd/worktree, RELAY_HOME와 cmux 소켓 접근이 필요하다. 설정은 환경별로 맞추고 자동으로 전체 권한을 풀지 않는다.
 - 창 탐색 실패 후에도 알려진 자식과 파일 예약을 보존한다. status로 확인하고 close한다. 부모 프로세스가 죽었다고 자식까지 끝났다고 가정하지 않는다.
-- 비정상 종료로 ownership.lock/작업 .operation.lock/workflow .lock이 남으면 기록된 PID·실제 실행기·상태를 확인한 뒤에만 잠금을 정리한다. 살아 있는 작업 예약을 임의 삭제하지 않는다.
+- 비정상 종료로 ownership.lock/worktree.lock/작업 .operation.lock/workflow .lock이 남으면 기록된 PID·실제 실행기·상태를 확인한 뒤에만 잠금을 정리한다. 살아 있는 작업 예약을 임의 삭제하지 않는다.
 - 검증 중 강제 종료는 자동 재실행하지 않는다. 영수증과 실제 부수효과를 먼저 확인한다.
 - 실제 두 공식 CLI 로그인과 cmux·샌드박스 조합은 환경에 따라 다르다. 테스트가 가짜 CLI였다면 실제 구독 실행까지 확인했다고 말하지 않는다.
